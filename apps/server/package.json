@@ -1,0 +1,6 @@
+{
+  "name": "server",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Real-time multiplayer server (Node + Colyseus) — Phase 6, Online Multiplayer. Not yet implemented."
+}

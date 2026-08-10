@@ -1,0 +1,16 @@
+{
+  "name": "king-app",
+  "private": true,
+  "version": "0.0.1",
+  "description": "King (Rey) card game — Web, Android, iOS.",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build",
+    "test": "pnpm -r --filter=./packages/* test",
+    "lint": "pnpm -r lint",
+    "mobile": "pnpm --filter mobile start"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.28.0"
+}

@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "King",
+    "slug": "king-app",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#0b3d2e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.king.app"
+    },
+    "android": {
+      "package": "com.king.app"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    }
+  }
+}
