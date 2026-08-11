@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { AuctionResult } from "../src/auction";
 import { createDeck, shuffle } from "../src/deck";
 import {
   NEGATIVE_GAME_TOTAL,
@@ -77,6 +78,56 @@ describe("scorePositiveHand — zero-sum invariant", () => {
       );
     });
   }
+});
+
+describe("scorePositiveHand — auction transfer zero-sum invariant", () => {
+  for (const direction of ["up", "down"] as const) {
+    it(`direction="${direction}" still totals ${POSITIVE_HAND_TOTAL} when an auction bid transfers tricks`, () => {
+      fc.assert(
+        fc.property(
+          fc.integer({ min: 0, max: 2 ** 31 - 1 }),
+          fc.integer({ min: 0, max: 3 }),
+          fc.integer({ min: 1, max: 3 }),
+          // Deliberately covers bids below, within, and above the 0-13 range a real trick count
+          // can take, since a losing bidder can be "bid > actual tricks captured".
+          fc.integer({ min: -5, max: 18 }),
+          (seed, dealer, offset, bid) => {
+            const hand = buildHandResult(seed);
+            const winner = ((dealer + offset) % 4) as PlayerIndex;
+            const auction: AuctionResult = { dealer: dealer as PlayerIndex, winner, bid };
+            const scores = scorePositiveHand(hand, direction, auction);
+            expect(sum(scores)).toBe(POSITIVE_HAND_TOTAL);
+          },
+        ),
+        { numRuns: 200 },
+      );
+    });
+  }
+
+  it("an auction winner who wins the most tricks can still score below a non-auction hand's dealer share", () => {
+    // Concrete illustration of the transfer, matching CLAUDE.md: dealer captures 2 tricks but the
+    // auction winner bid (and is credited with transferring) 6, landing on the dealer's tally.
+    const hand: HandResult = [];
+    const trickCounts: Record<PlayerIndex, number> = { 0: 2, 1: 8, 2: 2, 3: 1 };
+    (Object.keys(trickCounts) as unknown as PlayerIndex[]).forEach((player) => {
+      for (let i = 0; i < trickCounts[player]; i++) {
+        hand.push({
+          plays: [
+            { player: 0, card: { suit: "C", rank: 2 } },
+            { player: 1, card: { suit: "C", rank: 3 } },
+            { player: 2, card: { suit: "C", rank: 4 } },
+            { player: 3, card: { suit: "C", rank: 5 } },
+          ],
+          winner: player,
+        });
+      }
+    });
+    const auction: AuctionResult = { dealer: 0, winner: 1, bid: 6 };
+    const scores = scorePositiveHand(hand, "up", auction);
+    // dealer: 2 + 6 = 8 tricks * 25 = 200; winner: 8 - 6 = 2 tricks * 25 = 50.
+    expect(scores).toEqual({ 0: 200, 1: 50, 2: 50, 3: 25 });
+    expect(sum(scores)).toBe(POSITIVE_HAND_TOTAL);
+  });
 });
 
 describe("scoreNegativeHand — targeted unit cases", () => {

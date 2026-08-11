@@ -51,10 +51,9 @@ export interface Trick {
 export type HandResult = Trick[];
 
 /**
- * The alternative-rules toggle menu (positive hands only). Phase 1 (this package's initial
- * scope) implements scoring for `playingDirection` since it's cheap and directly affects
- * scoring math. `mandatoryKilling`, `auctionMustSell`, and `backwards` are legality/auction
- * concerns wired up in Phase 2 — see the Notion "King App — Project Plan" phase 2 entry.
+ * The alternative-rules toggle menu (positive hands only). `playingDirection` affects scoring
+ * math (see scoring.ts). `mandatoryKilling` and `backwards` affect follow-suit legality (see
+ * legality.ts). `auctionMustSell` affects auction resolution (see auction.ts).
  *
  * Defaults here MUST match plain base-rules behavior: adding a new toggle must never change
  * existing behavior for players who haven't turned it on.
@@ -72,3 +71,6 @@ export const DEFAULT_RULE_SET: RuleSet = {
   playingDirection: "up",
   backwards: false,
 };
+
+/** A positive hand's trump suit, or `null` for a no-trump hand. */
+export type TrumpSuit = Suit | null;

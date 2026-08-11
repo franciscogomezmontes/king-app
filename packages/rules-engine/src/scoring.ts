@@ -1,3 +1,4 @@
+import { AuctionResult } from "./auction";
 import { HandResult, NegativeHandType, PlayerIndex } from "./types";
 
 const PLAYERS: PlayerIndex[] = [0, 1, 2, 3];
@@ -91,19 +92,46 @@ export function scoreNegativeHand(
 }
 
 /**
+ * Applies an auction's trick transfer: `auction.bid` tricks move from `auction.winner`'s tally
+ * to `auction.dealer`'s, before scoring. This is a pure redistribution between two players — the
+ * total across all 4 players is unchanged — so it can never break the positive-hand zero-sum
+ * invariant, no matter the bid size (including a bid that exceeds what `winner` actually
+ * captured, which is a legal, if unlucky, outcome and simply yields a negative trick count for
+ * scoring purposes). Returns `tricksWon` unchanged if there was no auction.
+ */
+export function applyAuctionTransfer(
+  tricksWon: Record<PlayerIndex, number>,
+  auction: AuctionResult | null,
+): Record<PlayerIndex, number> {
+  if (auction === null) return tricksWon;
+  // Sequential mutation on a clone (rather than a single object literal with two computed keys)
+  // so this stays correct even if winner and dealer were ever the same seat — the two updates
+  // would otherwise collide and only the second key's write would stick.
+  const result = { ...tricksWon };
+  result[auction.winner] -= auction.bid;
+  result[auction.dealer] += auction.bid;
+  return result;
+}
+
+/**
  * Scores one positive hand. Default direction "up" pays +25/trick captured. "down" (the
  * "Playing Down" alternative rule) starts every player at 325 and deducts 75/trick captured.
  * Both directions always sum to exactly POSITIVE_HAND_TOTAL (325) across the 4 players,
  * regardless of how the 13 tricks were distributed — that's what makes the whole game zero-sum
  * independent of which direction the dealer chooses.
+ *
+ * `auction`, if given, is applied via `applyAuctionTransfer` before the per-trick payout is
+ * computed — see CLAUDE.md's auction bid transfer note.
  */
 export function scorePositiveHand(
   hand: HandResult,
   direction: "up" | "down" = "up",
+  auction: AuctionResult | null = null,
 ): Record<PlayerIndex, number> {
   const scores = zeroScores();
-  const tricksWon = zeroScores();
-  for (const trick of hand) tricksWon[trick.winner] += 1;
+  const rawTricksWon = zeroScores();
+  for (const trick of hand) rawTricksWon[trick.winner] += 1;
+  const tricksWon = applyAuctionTransfer(rawTricksWon, auction);
 
   for (const player of PLAYERS) {
     scores[player] =

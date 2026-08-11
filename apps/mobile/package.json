@@ -7,23 +7,29 @@
     "start": "expo start",
     "web": "expo start --web",
     "android": "expo start --android",
-    "ios": "expo start --ios"
+    "ios": "expo start --ios",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "expo": "~52.0.0",
+    "expo-localization": "~16.0.1",
     "expo-status-bar": "~2.0.0",
     "@expo/metro-runtime": "~4.0.1",
     "@babel/runtime": "^7.25.0",
+    "ai-opponent": "workspace:*",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-native": "0.76.9",
     "react-native-web": "~0.19.13",
     "rules-engine": "workspace:*",
-    "ui-kit": "workspace:*"
+    "ui-kit": "workspace:*",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~18.3.12",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
   }
 }
