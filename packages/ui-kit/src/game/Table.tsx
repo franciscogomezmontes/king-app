@@ -3,11 +3,14 @@ import type { Card, PlayerIndex } from "rules-engine";
 import { OpponentSeat } from "./OpponentSeat";
 import { CARD_HEIGHT, PlayingCard } from "./PlayingCard";
 import { seatPosition } from "./seatPosition";
+import { TrickPile } from "./TrickPile";
 
 export interface TableProps {
   humanSeat: PlayerIndex;
   /** Each player's remaining card count, for the opponents' card-back counters. */
   handSizes: Record<PlayerIndex, number>;
+  /** Each player's tricks won so far this hand, for their face-down pile. */
+  tricksWon: Record<PlayerIndex, number>;
   currentTrick: { player: PlayerIndex; card: Card }[];
   seatLabels: Record<PlayerIndex, string>;
   /** Whose turn it is right now, or null when it isn't anyone's card-play turn (e.g. bidding). */
@@ -16,12 +19,13 @@ export interface TableProps {
 
 /**
  * The table view: the 3 opponents arranged left/top/right around the human (always at the
- * bottom, via `seatPosition`), each showing their remaining card count and — once played — their
- * card for the trick in progress. The human's own played card shows in the center. This is the
- * standard trick-taking card game table convention (Hearts, Spades, every King/Rıfkı
- * implementation) — cards appear near the seat that played them, not in an undifferentiated row.
+ * bottom, via `seatPosition`), each showing their remaining card count, face-down trick pile, and
+ * — once played — their card for the trick in progress. The human's own played card and trick
+ * pile show at the bottom-center. This is the standard trick-taking card game table convention
+ * (Hearts, Spades, every King/Rıfkı implementation) — cards appear near the seat that played
+ * them, not in an undifferentiated row.
  */
-export function Table({ humanSeat, handSizes, currentTrick, seatLabels, currentTurn }: TableProps) {
+export function Table({ humanSeat, handSizes, tricksWon, currentTrick, seatLabels, currentTurn }: TableProps) {
   const playedBySeat = new Map(currentTrick.map((play) => [play.player, play.card]));
   const opponents = ([0, 1, 2, 3] as PlayerIndex[]).filter((seat) => seat !== humanSeat);
   const seatAt = new Map(opponents.map((seat) => [seatPosition(seat, humanSeat), seat]));
@@ -33,6 +37,7 @@ export function Table({ humanSeat, handSizes, currentTrick, seatLabels, currentT
       <OpponentSeat
         label={seatLabels[seat]}
         cardCount={handSizes[seat]}
+        tricksWon={tricksWon[seat]}
         isCurrentTurn={currentTurn === seat}
         playedCard={playedBySeat.get(seat) ?? null}
       />
@@ -50,6 +55,9 @@ export function Table({ humanSeat, handSizes, currentTrick, seatLabels, currentT
           {humanPlayedCard ? <PlayingCard card={humanPlayedCard} /> : <Text style={styles.centerDash}>—</Text>}
         </View>
         {renderOpponent("right")}
+      </View>
+      <View style={styles.humanPile}>
+        <TrickPile count={tricksWon[humanSeat]} />
       </View>
     </View>
   );
@@ -79,5 +87,9 @@ const styles = StyleSheet.create({
   centerDash: {
     color: "#8fae9c",
     fontSize: 14,
+  },
+  humanPile: {
+    alignItems: "center",
+    marginTop: 4,
   },
 });

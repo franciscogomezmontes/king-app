@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { Card } from "rules-engine";
 import { CardBack } from "./CardBack";
 import { CARD_HEIGHT, PlayingCard } from "./PlayingCard";
+import { TrickPile } from "./TrickPile";
 
 export interface OpponentSeatProps {
   label: string;
@@ -9,10 +10,13 @@ export interface OpponentSeatProps {
   isCurrentTurn: boolean;
   /** The card this opponent has played in the current trick, if any — shown face up beneath their seat. */
   playedCard?: Card | null;
+  /** How many tricks this opponent has won so far this hand. */
+  tricksWon: number;
 }
 
-/** An opponent's seat: name/position, remaining card count, and their card for the trick in progress (if played), highlighted on their turn. */
-export function OpponentSeat({ label, cardCount, isCurrentTurn, playedCard = null }: OpponentSeatProps) {
+/** An opponent's seat: name/position, remaining card count, their card for the trick in progress
+ * (if played), and their face-down pile of tricks won so far — highlighted on their turn. */
+export function OpponentSeat({ label, cardCount, isCurrentTurn, playedCard = null, tricksWon }: OpponentSeatProps) {
   return (
     <View style={[styles.container, isCurrentTurn && styles.active]}>
       <Text style={styles.label}>{label}</Text>
@@ -20,6 +24,7 @@ export function OpponentSeat({ label, cardCount, isCurrentTurn, playedCard = nul
         <CardBack />
         <Text style={styles.count}>×{cardCount}</Text>
       </View>
+      <TrickPile count={tricksWon} />
       <View style={styles.playedSlot}>{playedCard && <PlayingCard card={playedCard} />}</View>
     </View>
   );

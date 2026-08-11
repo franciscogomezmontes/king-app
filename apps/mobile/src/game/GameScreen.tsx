@@ -53,6 +53,7 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   );
   const game = store((s) => s.game);
   const biddingIndex = store((s) => s.biddingIndex);
+  const displayTrick = store((s) => s.displayTrick);
   const playCard = store((s) => s.playCard);
   const declareTrump = store((s) => s.declareTrump);
   const openAuction = store((s) => s.openAuction);
@@ -80,6 +81,8 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
     2: game.hands[2].length,
     3: game.hands[3].length,
   };
+  const tricksWon: Record<PlayerIndex, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
+  for (const trick of game.completedTricks) tricksWon[trick.winner] += 1;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -98,7 +101,8 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
         <Table
           humanSeat={HUMAN_SEAT}
           handSizes={handSizes}
-          currentTrick={game.currentTrick}
+          tricksWon={tricksWon}
+          currentTrick={displayTrick}
           seatLabels={seatLabels}
           currentTurn={decision.kind === "play" ? decision.player : null}
         />

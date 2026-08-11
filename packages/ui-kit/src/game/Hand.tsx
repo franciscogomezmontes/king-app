@@ -1,15 +1,26 @@
 import { StyleSheet, View } from "react-native";
 import type { Card } from "rules-engine";
+import { SUITS } from "rules-engine";
 import { CARD_WIDTH, PlayingCard } from "./PlayingCard";
 
 function sameCard(a: Card, b: Card): boolean {
   return a.suit === b.suit && a.rank === b.rank;
 }
 
+/** Groups cards by suit (in rules-engine's canonical S/H/D/C order) then rank ascending, so
+ * scanning "what can I play" doesn't mean hunting through a shuffled hand. */
+function sortForDisplay(cards: Card[]): Card[] {
+  return [...cards].sort((a, b) => {
+    const suitDiff = SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
+    return suitDiff !== 0 ? suitDiff : a.rank - b.rank;
+  });
+}
+
 // A full 13-card hand must still fit a small phone viewport; below this many cards, spread them
 // out with less (or no) overlap instead of always using the tightest packing.
 const TARGET_ROW_WIDTH = 340;
 const MIN_VISIBLE_SLIVER = 20; // never overlap a card down to less than this much visible width
+const LIFT_OFFSET = 14; // how far a legal card rises out of the fan
 
 /** How much of each card (after the first) should stay uncovered by the next one. */
 function visibleSliverWidth(cardCount: number): number {
@@ -20,7 +31,7 @@ function visibleSliverWidth(cardCount: number): number {
 
 export interface HandProps {
   cards: Card[];
-  /** Which of `cards` are currently legal to play — highlighted when it's this hand's turn. */
+  /** Which of `cards` are currently legal to play — highlighted (and raised) when it's this hand's turn. */
   legalCards: Card[];
   onPlay: (card: Card) => void;
   /** False when it isn't this hand's turn — every card is then non-interactive and unhighlighted. */
@@ -28,26 +39,35 @@ export interface HandProps {
 }
 
 /**
- * The human player's own fanned, tappable hand. Overlaps cards via flexbox negative margins
- * (not absolute positioning — the fan-layout pitfall the king-cross-platform-ui skill calls out)
- * so a 13-card hand still fits a phone-width screen, while keeping at least a
- * MIN_VISIBLE_SLIVER-wide strip of every card tappable.
+ * The human player's own fanned, tappable hand, sorted by suit then rank so it reads as an
+ * organized hand instead of dealt-order chaos. Overlaps cards via flexbox negative margins (not
+ * absolute positioning — the fan-layout pitfall the king-cross-platform-ui skill calls out) so a
+ * 13-card hand still fits a phone-width screen, while keeping at least a MIN_VISIBLE_SLIVER-wide
+ * strip of every card tappable.
  *
- * Legal cards get a highlighted border rather than dimming everything else — dimming most of a
- * 13-card hand down to near-invisibility read as broken/washed-out in practice, not helpful.
- * The whole hand dims slightly only when it isn't this player's turn at all (`interactive` false),
- * as a single passive "waiting" cue rather than a per-card judgment.
+ * Legal cards get a highlighted border *and* rise slightly out of the fan, rather than dimming
+ * everything else — dimming most of a 13-card hand down to near-invisibility read as
+ * broken/washed-out in practice, and with cards this overlapped a border alone can still be easy
+ * to miss. The whole hand dims slightly only when it isn't this player's turn at all
+ * (`interactive` false), as a single passive "waiting" cue rather than a per-card judgment.
  */
 export function Hand({ cards, legalCards, onPlay, interactive }: HandProps) {
-  const overlapMargin = -(CARD_WIDTH - visibleSliverWidth(cards.length));
+  const sorted = sortForDisplay(cards);
+  const overlapMargin = -(CARD_WIDTH - visibleSliverWidth(sorted.length));
 
   return (
     <View style={[styles.row, !interactive && styles.waiting]}>
-      {cards.map((card, index) => {
+      {sorted.map((card, index) => {
         const isLegal = legalCards.some((c) => sameCard(c, card));
         const canPlay = interactive && isLegal;
         return (
-          <View key={`${card.suit}${card.rank}`} style={index > 0 ? { marginLeft: overlapMargin } : undefined}>
+          <View
+            key={`${card.suit}${card.rank}`}
+            style={[
+              index > 0 && { marginLeft: overlapMargin },
+              canPlay && styles.lifted,
+            ]}
+          >
             <PlayingCard
               card={card}
               disabled={!canPlay}
@@ -69,5 +89,8 @@ const styles = StyleSheet.create({
   },
   waiting: {
     opacity: 0.85,
+  },
+  lifted: {
+    transform: [{ translateY: -LIFT_OFFSET }],
   },
 });
