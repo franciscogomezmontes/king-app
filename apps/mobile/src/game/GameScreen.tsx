@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
-import { Hand, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
+import { Hand, Scoreboard, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
@@ -60,6 +60,7 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   const submitBid = store((s) => s.submitBid);
   const passBid = store((s) => s.passBid);
   const dealerDecide = store((s) => s.dealerDecide);
+  const continueToNextHand = store((s) => s.continueToNextHand);
 
   const decision = pendingDecision(game, biddingIndex);
   const seatLabels: Record<PlayerIndex, string> = {
@@ -71,6 +72,12 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
 
   if (game.phase === "game-complete") {
     return <GameOverView game={game} seatLabels={seatLabels} onExit={onExit} />;
+  }
+
+  if (game.phase === "hand-complete") {
+    return (
+      <HandCompleteView game={game} seatLabels={seatLabels} onContinue={continueToNextHand} onExit={onExit} />
+    );
   }
 
   const isHumanPlaying = decision.kind === "play" && decision.player === HUMAN_SEAT;
@@ -238,6 +245,36 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
   return null;
 }
 
+/** Shown after every completed hand (not just the last) — the results table so far, paused until
+ * the human explicitly continues, so a hand's outcome is never skipped past unseen. */
+function HandCompleteView({
+  game,
+  seatLabels,
+  onContinue,
+  onExit,
+}: {
+  game: GameState;
+  seatLabels: Record<PlayerIndex, string>;
+  onContinue: () => void;
+  onExit: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <Text style={styles.title}>{t("game:handComplete.title", { number: game.handIndex + 1 })}</Text>
+        <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
+        <Pressable style={styles.primaryButton} onPress={onContinue}>
+          <Text style={styles.primaryButtonLabel}>{t("game:handComplete.continue")}</Text>
+        </Pressable>
+        <Pressable style={styles.linkButton} onPress={onExit}>
+          <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
 function GameOverView({
   game,
   seatLabels,
@@ -252,12 +289,7 @@ function GameOverView({
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
         <Text style={styles.title}>{t("game:gameOver")}</Text>
-        <Text style={styles.prompt}>{t("game:finalScores")}</Text>
-        {ALL_SEATS.map((seat) => (
-          <Text key={seat} style={styles.finalScore}>
-            {seatLabels[seat]}: {game.cumulativeScores[seat]}
-          </Text>
-        ))}
+        <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Pressable style={styles.primaryButton} onPress={onExit}>
           <Text style={styles.primaryButtonLabel}>{t("game:backToMenu")}</Text>
         </Pressable>
@@ -382,10 +414,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     minHeight: 18,
     marginTop: 8,
-  },
-  finalScore: {
-    color: "#f5e6c8",
-    fontSize: 16,
-    marginVertical: 2,
   },
 });

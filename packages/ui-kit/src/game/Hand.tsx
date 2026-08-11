@@ -19,7 +19,9 @@ function sortForDisplay(cards: Card[]): Card[] {
 // A full 13-card hand must still fit a small phone viewport; below this many cards, spread them
 // out with less (or no) overlap instead of always using the tightest packing.
 const TARGET_ROW_WIDTH = 340;
-const MIN_VISIBLE_SLIVER = 20; // never overlap a card down to less than this much visible width
+// Rank/suit now live in the card's top-left corner (not centered), so the visible sliver must
+// stay wide enough to show that corner index in full, not just enough to notice a card exists.
+const MIN_VISIBLE_SLIVER = 24;
 const LIFT_OFFSET = 14; // how far a legal card rises out of the fan
 
 /** How much of each card (after the first) should stay uncovered by the next one. */

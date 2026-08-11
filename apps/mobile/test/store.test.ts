@@ -42,12 +42,18 @@ async function playFullGameViaStore(
   const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty, firstDealer, random, botDelayMs: 0 });
   await store.getState().waitForIdle(); // settle the initial deal (+ any pre-human bot turns)
 
-  const { playCard, declareTrump, openAuction, submitBid, passBid, dealerDecide, waitForIdle } = store.getState();
+  const { playCard, declareTrump, openAuction, submitBid, passBid, dealerDecide, continueToNextHand, waitForIdle } =
+    store.getState();
 
   for (;;) {
     const { game, biddingIndex } = store.getState();
     const decision = pendingDecision(game, biddingIndex);
     if (decision.kind === "done") return game;
+    if (decision.kind === "advance") {
+      continueToNextHand();
+      await waitForIdle();
+      continue;
+    }
     if (!("player" in decision) || decision.player !== HUMAN_SEAT) {
       throw new Error(`store should have auto-played this non-human decision: ${JSON.stringify(decision)}`);
     }

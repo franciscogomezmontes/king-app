@@ -28,13 +28,19 @@ export const GAME_RESOURCES = {
       },
       backToMenu: "Back to Menu",
       gameOver: "Game Over",
-      finalScores: "Final Scores",
       difficulty: {
         label: "Difficulty",
         easy: "Easy",
         normal: "Normal",
       },
       start: "Start Game",
+      handComplete: {
+        title: "Hand {{number}} Complete",
+        continue: "Continue",
+      },
+      scoreboard: {
+        total: "Total",
+      },
     },
   },
   es: {
@@ -61,13 +67,19 @@ export const GAME_RESOURCES = {
       },
       backToMenu: "Volver al Menú",
       gameOver: "Fin del Juego",
-      finalScores: "Puntuación Final",
       difficulty: {
         label: "Dificultad",
         easy: "Fácil",
         normal: "Normal",
       },
       start: "Empezar Juego",
+      handComplete: {
+        title: "Mano {{number}} Completa",
+        continue: "Continuar",
+      },
+      scoreboard: {
+        total: "Total",
+      },
     },
   },
 };

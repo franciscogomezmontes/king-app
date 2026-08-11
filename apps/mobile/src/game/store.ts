@@ -131,11 +131,8 @@ function applyDecisionResult(
   return { state: nextState, biddingIndex: nextBiddingIndex };
 }
 
-function systemStep(state: GameState, kind: "deal" | "advance", random: RandomSource): GameState {
-  if (kind === "deal") {
-    return applyAction(state, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
-  }
-  return applyAction(state, { type: "ADVANCE_HAND" });
+function dealStep(state: GameState, random: RandomSource): GameState {
+  return applyAction(state, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
 }
 
 function delay(ms: number): Promise<void> {
@@ -176,8 +173,13 @@ async function applyStepWithReveal(
   return stepped;
 }
 
-/** Runs system steps and bot decisions until it's the human's turn (or the game is over),
- * pausing before each bot decision so its card is visibly "played," not just instantly present. */
+/**
+ * Runs dealing and bot decisions until it's the human's turn, or nothing more can happen without
+ * them — that includes "hand-complete" (`{kind: "advance"}`), which deliberately does *not*
+ * auto-advance: the UI stops there to show the hand's results and waits for the human to
+ * continue (`continueToNextHand`), same as it waits for any other human decision. Pauses before
+ * each bot decision so its card is visibly "played," not just instantly present.
+ */
 async function autoPlay(
   state: GameState,
   humanSeat: PlayerIndex,
@@ -191,9 +193,9 @@ async function autoPlay(
   let bi = biddingIndex;
   for (;;) {
     const decision = pendingDecision(current, bi);
-    if (decision.kind === "done") return;
-    if (decision.kind === "deal" || decision.kind === "advance") {
-      current = systemStep(current, decision.kind, random);
+    if (decision.kind === "done" || decision.kind === "advance") return;
+    if (decision.kind === "deal") {
+      current = dealStep(current, random);
       bi = 0;
       onStep(current, bi, current.currentTrick);
       continue;
@@ -233,6 +235,9 @@ export interface GameStore {
   submitBid: (tricks: number) => void;
   passBid: () => void;
   dealerDecide: (sell: boolean) => void;
+  /** Acknowledges the just-completed hand's results and moves on to the next deal (or to
+   * game-complete, if that was the 10th hand). */
+  continueToNextHand: () => void;
   /** Resolves once any in-flight bot auto-play / trick-reveal pause has settled. The real UI
    * doesn't need this — it just reacts to state as it streams in — but tests driving a full game
    * programmatically need to know when it's safe to read state / dispatch the next move. */
@@ -286,6 +291,7 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
       submitBid: (tricks) => dispatch({ type: "SUBMIT_BID", player: get().humanSeat, tricks }),
       passBid: () => dispatch("pass"),
       dealerDecide: (sell) => dispatch({ type: "DEALER_DECIDE", player: get().humanSeat, sell }),
+      continueToNextHand: () => dispatch({ type: "ADVANCE_HAND" }),
       waitForIdle: () => pending,
     };
   });
