@@ -20,10 +20,10 @@ function visibleSliverWidth(cardCount: number): number {
 
 export interface HandProps {
   cards: Card[];
-  /** Which of `cards` are currently legal to play — everything else renders dimmed/disabled. */
+  /** Which of `cards` are currently legal to play — highlighted when it's this hand's turn. */
   legalCards: Card[];
   onPlay: (card: Card) => void;
-  /** False when it isn't this hand's turn — every card renders disabled regardless of legality. */
+  /** False when it isn't this hand's turn — every card is then non-interactive and unhighlighted. */
   interactive: boolean;
 }
 
@@ -31,21 +31,29 @@ export interface HandProps {
  * The human player's own fanned, tappable hand. Overlaps cards via flexbox negative margins
  * (not absolute positioning — the fan-layout pitfall the king-cross-platform-ui skill calls out)
  * so a 13-card hand still fits a phone-width screen, while keeping at least a
- * MIN_VISIBLE_SLIVER-wide strip of every card tappable (a too-narrow sliver is both a real touch
- * target problem and, not coincidentally, exactly what broke this component's own Playwright
- * verification during development).
+ * MIN_VISIBLE_SLIVER-wide strip of every card tappable.
+ *
+ * Legal cards get a highlighted border rather than dimming everything else — dimming most of a
+ * 13-card hand down to near-invisibility read as broken/washed-out in practice, not helpful.
+ * The whole hand dims slightly only when it isn't this player's turn at all (`interactive` false),
+ * as a single passive "waiting" cue rather than a per-card judgment.
  */
 export function Hand({ cards, legalCards, onPlay, interactive }: HandProps) {
   const overlapMargin = -(CARD_WIDTH - visibleSliverWidth(cards.length));
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, !interactive && styles.waiting]}>
       {cards.map((card, index) => {
         const isLegal = legalCards.some((c) => sameCard(c, card));
         const canPlay = interactive && isLegal;
         return (
           <View key={`${card.suit}${card.rank}`} style={index > 0 ? { marginLeft: overlapMargin } : undefined}>
-            <PlayingCard card={card} disabled={!canPlay} onPress={canPlay ? () => onPlay(card) : undefined} />
+            <PlayingCard
+              card={card}
+              disabled={!canPlay}
+              highlighted={canPlay}
+              onPress={canPlay ? () => onPlay(card) : undefined}
+            />
           </View>
         );
       })}
@@ -58,5 +66,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "flex-end",
+  },
+  waiting: {
+    opacity: 0.85,
   },
 });

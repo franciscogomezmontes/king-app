@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
-import { Hand, OpponentSeat, ScorePanel, SUIT_SYMBOLS, TrickArea, useTranslation } from "ui-kit";
+import { Hand, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 const HUMAN_SEAT: PlayerIndex = 0;
+
+// Beyond this viewport width, stop growing the content and center it instead — matches App.tsx's
+// mode picker. Without this cap, "width: 100%" below stretches edge-to-edge on a wide desktop
+// browser, spreading the opponent seats and trick area apart instead of keeping the table compact.
+const MAX_CONTENT_WIDTH = 480;
 
 export interface GameScreenProps {
   onExit: () => void;
@@ -25,16 +30,18 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>{t("game:difficulty.label")}</Text>
-      <Pressable style={styles.primaryButton} onPress={() => onChoose("easy")}>
-        <Text style={styles.primaryButtonLabel}>{t("game:difficulty.easy")}</Text>
-      </Pressable>
-      <Pressable style={styles.primaryButton} onPress={() => onChoose("normal")}>
-        <Text style={styles.primaryButtonLabel}>{t("game:difficulty.normal")}</Text>
-      </Pressable>
-      <Pressable style={styles.linkButton} onPress={onExit}>
-        <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
-      </Pressable>
+      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <Text style={styles.title}>{t("game:difficulty.label")}</Text>
+        <Pressable style={styles.primaryButton} onPress={() => onChoose("easy")}>
+          <Text style={styles.primaryButtonLabel}>{t("game:difficulty.easy")}</Text>
+        </Pressable>
+        <Pressable style={styles.primaryButton} onPress={() => onChoose("normal")}>
+          <Text style={styles.primaryButtonLabel}>{t("game:difficulty.normal")}</Text>
+        </Pressable>
+        <Pressable style={styles.linkButton} onPress={onExit}>
+          <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -65,45 +72,48 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
     return <GameOverView game={game} seatLabels={seatLabels} onExit={onExit} />;
   }
 
-  const opponents = ALL_SEATS.filter((seat) => seat !== HUMAN_SEAT);
   const isHumanPlaying = decision.kind === "play" && decision.player === HUMAN_SEAT;
   const legalCards = isHumanPlaying ? legalCardsFor(game, HUMAN_SEAT) : [];
+  const handSizes: Record<PlayerIndex, number> = {
+    0: game.hands[0].length,
+    1: game.hands[1].length,
+    2: game.hands[2].length,
+    3: game.hands[3].length,
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit}>
-          <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
-        </Pressable>
+      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <View style={styles.header}>
+          <Pressable onPress={onExit}>
+            <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
+          </Pressable>
+        </View>
+        <ScorePanel
+          handType={game.handType}
+          handNumber={game.handIndex + 1}
+          scores={game.cumulativeScores}
+          seatLabels={seatLabels}
+        />
+        <Table
+          humanSeat={HUMAN_SEAT}
+          handSizes={handSizes}
+          currentTrick={game.currentTrick}
+          seatLabels={seatLabels}
+          currentTurn={decision.kind === "play" ? decision.player : null}
+        />
+        <DecisionPanel
+          game={game}
+          decision={decision}
+          declareTrump={declareTrump}
+          openAuction={openAuction}
+          submitBid={submitBid}
+          passBid={passBid}
+          dealerDecide={dealerDecide}
+        />
+        <Text style={styles.turnIndicator}>{isHumanPlaying ? t("game:yourTurn") : ""}</Text>
+        <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
       </View>
-      <ScorePanel
-        handType={game.handType}
-        handNumber={game.handIndex + 1}
-        scores={game.cumulativeScores}
-        seatLabels={seatLabels}
-      />
-      <View style={styles.opponents}>
-        {opponents.map((seat) => (
-          <OpponentSeat
-            key={seat}
-            label={seatLabels[seat]}
-            cardCount={game.hands[seat].length}
-            isCurrentTurn={"player" in decision && decision.player === seat}
-          />
-        ))}
-      </View>
-      <TrickArea plays={game.currentTrick} seatLabels={seatLabels} />
-      <DecisionPanel
-        game={game}
-        decision={decision}
-        declareTrump={declareTrump}
-        openAuction={openAuction}
-        submitBid={submitBid}
-        passBid={passBid}
-        dealerDecide={dealerDecide}
-      />
-      <Text style={styles.turnIndicator}>{isHumanPlaying ? t("game:yourTurn") : ""}</Text>
-      <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
     </SafeAreaView>
   );
 }
@@ -236,16 +246,18 @@ function GameOverView({
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>{t("game:gameOver")}</Text>
-      <Text style={styles.prompt}>{t("game:finalScores")}</Text>
-      {ALL_SEATS.map((seat) => (
-        <Text key={seat} style={styles.finalScore}>
-          {seatLabels[seat]}: {game.cumulativeScores[seat]}
-        </Text>
-      ))}
-      <Pressable style={styles.primaryButton} onPress={onExit}>
-        <Text style={styles.primaryButtonLabel}>{t("game:backToMenu")}</Text>
-      </Pressable>
+      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <Text style={styles.title}>{t("game:gameOver")}</Text>
+        <Text style={styles.prompt}>{t("game:finalScores")}</Text>
+        {ALL_SEATS.map((seat) => (
+          <Text key={seat} style={styles.finalScore}>
+            {seatLabels[seat]}: {game.cumulativeScores[seat]}
+          </Text>
+        ))}
+        <Pressable style={styles.primaryButton} onPress={onExit}>
+          <Text style={styles.primaryButtonLabel}>{t("game:backToMenu")}</Text>
+        </Pressable>
+      </View>
     </SafeAreaView>
   );
 }
@@ -258,6 +270,13 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingHorizontal: 16,
   },
+  // Caps + centers everything on wide viewports; on a phone (narrower than the cap) this is just
+  // 100% width, so nothing changes there — same pattern as App.tsx's mode picker.
+  content: {
+    width: "100%",
+    alignSelf: "center",
+    alignItems: "center",
+  },
   header: {
     width: "100%",
     marginBottom: 8,
@@ -267,12 +286,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#f5e6c8",
     marginBottom: 16,
-  },
-  opponents: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    marginVertical: 8,
   },
   panel: {
     alignItems: "center",

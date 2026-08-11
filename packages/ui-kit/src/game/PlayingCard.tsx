@@ -14,13 +14,16 @@ export const CARD_HEIGHT = 72;
 
 export interface PlayingCardProps {
   card: Card;
-  /** Omit (or pass disabled) to render a non-interactive card — e.g. in the trick area. */
+  /** Omit to render a non-interactive card — e.g. an opponent's played card on the table. */
   onPress?: () => void;
   disabled?: boolean;
+  /** Draws an attention border — used for the currently-legal cards in the human's hand, so
+   * "what can I play" reads as a positive highlight rather than dimming everything else out. */
+  highlighted?: boolean;
 }
 
 /** A single face-up playing card. No game logic — purely `card` in, a press callback out. */
-export function PlayingCard({ card, onPress, disabled = false }: PlayingCardProps) {
+export function PlayingCard({ card, onPress, disabled = false, highlighted = false }: PlayingCardProps) {
   const isRed = RED_SUITS.has(card.suit);
   const interactive = onPress !== undefined && !disabled;
 
@@ -28,7 +31,7 @@ export function PlayingCard({ card, onPress, disabled = false }: PlayingCardProp
     <Pressable
       onPress={interactive ? onPress : undefined}
       disabled={!interactive}
-      style={[styles.card, disabled && styles.cardDisabled]}
+      style={[styles.card, highlighted && styles.cardHighlighted]}
     >
       <Text style={[styles.rank, isRed ? styles.red : styles.black]}>{rankLabel(card.rank)}</Text>
       <Text style={[styles.suit, isRed ? styles.red : styles.black]}>{SUIT_SYMBOLS[card.suit]}</Text>
@@ -47,8 +50,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#0b3d2e",
   },
-  cardDisabled: {
-    opacity: 0.4,
+  cardHighlighted: {
+    borderColor: "#f2c14e",
+    borderWidth: 3,
   },
   rank: {
     fontSize: 18,
