@@ -3,7 +3,7 @@ import { deal } from "../deck";
 import { canLeadHearts, legalPlays } from "../legality";
 import { scoreNegativeHand, scorePositiveHand } from "../scoring";
 import { resolveTrick } from "../trick";
-import { Card, DEFAULT_RULE_SET, HandResult, PlayerIndex, RuleSet, TrumpSuit } from "../types";
+import { Card, DEFAULT_RULE_SET, HandResult, NegativeHandType, PlayerIndex, RuleSet, Trick, TrumpSuit } from "../types";
 import { DealerRotation, FirstLeaderRule, rotateLeftEachHand, seatAfterDealer } from "./dealer";
 import { GameState, HAND_SEQUENCE, HandHistoryEntry } from "./state";
 
@@ -212,7 +212,35 @@ export function legalCardsFor(state: GameState, player: PlayerIndex): Card[] {
   return legal;
 }
 
-/** A player plays a card to the current trick, resolving the trick (and the hand, if it was the 13th) as needed. */
+/**
+ * True once a negative hand's outcome is already fully locked in — every copy of the relevant
+ * penalty card has already been captured by someone, so no further trick can change any player's
+ * score. At that point the hand is over in every practical sense: continuing to play out the
+ * remaining tricks (whose cards are now all scoring-irrelevant for this hand type) is pure
+ * mechanical busywork, so `playCard` ends the hand right there instead of requiring all 13.
+ * Doesn't apply to No Tricks or No Last Two Tricks — every trick can still matter for those right
+ * up to the last one, so there's no point at which the outcome is knowable early.
+ */
+function isNegativeHandDecided(handType: NegativeHandType, completedTricks: Trick[]): boolean {
+  const captured = (predicate: (card: Card) => boolean): number =>
+    completedTricks.reduce((count, trick) => count + trick.plays.filter((p) => predicate(p.card)).length, 0);
+
+  switch (handType) {
+    case "noKingOfHearts":
+      return captured((c) => c.suit === "H" && c.rank === 13) >= 1;
+    case "noGentlemen":
+      return captured((c) => c.rank === 13 || c.rank === 11) >= 8;
+    case "noLady":
+      return captured((c) => c.rank === 12) >= 4;
+    case "noHearts":
+      return captured((c) => c.suit === "H") >= 13;
+    case "noTricks":
+    case "noLastTwo":
+      return false;
+  }
+}
+
+/** A player plays a card to the current trick, resolving the trick (and the hand, if it was the 13th, or earlier if the hand is already decided — see isNegativeHandDecided) as needed. */
 export function playCard(state: GameState, player: PlayerIndex, card: Card): GameState {
   if (state.phase !== "playing") {
     throw new Error(`playCard: expected phase "playing", got "${state.phase}"`);
@@ -242,7 +270,11 @@ export function playCard(state: GameState, player: PlayerIndex, card: Card): Gam
   const winner = resolveTrick(currentTrick, trumpSuit, ruleSet);
   const completedTricks = [...state.completedTricks, { plays: currentTrick, winner }];
 
-  if (completedTricks.length < 13) {
+  const handDecided =
+    completedTricks.length >= 13 ||
+    (state.handType !== "positive" && isNegativeHandDecided(state.handType, completedTricks));
+
+  if (!handDecided) {
     return { ...state, hands, currentTrick: [], completedTricks, currentTurn: winner };
   }
 

@@ -1,5 +1,7 @@
 export * from "./PlayingCard";
+export * from "./AuctionSummary";
 export * from "./CardBack";
+export * from "./DealerBadge";
 export * from "./Hand";
 export * from "./OpponentSeat";
 export * from "./Table";

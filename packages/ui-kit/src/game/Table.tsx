@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { Card, PlayerIndex } from "rules-engine";
+import { DealerBadge } from "./DealerBadge";
 import { OpponentSeat } from "./OpponentSeat";
 import { CARD_HEIGHT, CARD_WIDTH, PlayingCard } from "./PlayingCard";
 import { seatPosition, SeatPosition } from "./seatPosition";
@@ -7,6 +8,8 @@ import { TrickPile } from "./TrickPile";
 
 export interface TableProps {
   humanSeat: PlayerIndex;
+  /** Who's dealing the current hand — always shown, independent of currentTurn. */
+  dealer: PlayerIndex;
   /** Each player's remaining card count, for the opponents' card-back counters. */
   handSizes: Record<PlayerIndex, number>;
   /** Each player's tricks won so far this hand, for their face-down pile. */
@@ -17,31 +20,20 @@ export interface TableProps {
   currentTurn: PlayerIndex | null;
 }
 
-const CLUSTER_SIZE = 168;
-const CLUSTER_CARD_TOP = (CLUSTER_SIZE - CARD_HEIGHT) / 2;
-const CLUSTER_CARD_LEFT = (CLUSTER_SIZE - CARD_WIDTH) / 2;
-
-// Nudges each played card from dead-center toward the seat that played it, so the pile still
-// reads as "who played what" while staying a single cluster in the middle of the table — the
-// convention most trick-taking apps use, rather than pinning cards next to each opponent's seat.
-const CLUSTER_OFFSET: Record<SeatPosition, { top: number; left: number }> = {
-  top: { top: -16, left: 0 },
-  bottom: { top: 16, left: 0 },
-  left: { top: 0, left: -22 },
-  right: { top: 0, left: 22 },
-};
-
 /**
  * The table view: the 3 opponents arranged left/top/right around the human (always at the
  * bottom, via `seatPosition`), each showing their remaining card count and face-down trick pile.
- * The current trick's cards collect in a single pile at the center of the table — nudged toward
- * whichever seat played them, and stacked in play order (first play at the back, most recent on
- * top) — rather than sitting next to each seat. This is the standard trick-taking card game table
- * convention (Hearts, Spades, every King/Rıfkı implementation).
+ * The current trick's cards collect at the center of the table, laid out in a small non-
+ * overlapping plus/cross (one slot per compass direction) rather than stacked on top of each
+ * other — every card's corner index stays fully visible at all times, including the first card
+ * played, not just whichever one ends up on top of a pile. Still reads as "the trick, in the
+ * middle of the table" (the standard trick-taking card game convention) without trading away
+ * legibility for it.
  */
-export function Table({ humanSeat, handSizes, tricksWon, currentTrick, seatLabels, currentTurn }: TableProps) {
+export function Table({ humanSeat, dealer, handSizes, tricksWon, currentTrick, seatLabels, currentTurn }: TableProps) {
   const opponents = ([0, 1, 2, 3] as PlayerIndex[]).filter((seat) => seat !== humanSeat);
   const seatAt = new Map(opponents.map((seat) => [seatPosition(seat, humanSeat), seat]));
+  const playAt = new Map(currentTrick.map((play) => [seatPosition(play.player, humanSeat), play.card]));
 
   function renderOpponent(position: "top" | "left" | "right") {
     const seat = seatAt.get(position);
@@ -52,8 +44,14 @@ export function Table({ humanSeat, handSizes, tricksWon, currentTrick, seatLabel
         cardCount={handSizes[seat]}
         tricksWon={tricksWon[seat]}
         isCurrentTurn={currentTurn === seat}
+        isDealer={dealer === seat}
       />
     );
+  }
+
+  function renderTrickCard(position: SeatPosition) {
+    const playedCard = playAt.get(position);
+    return <View style={styles.trickSlot}>{playedCard && <PlayingCard card={playedCard} />}</View>;
   }
 
   return (
@@ -62,28 +60,20 @@ export function Table({ humanSeat, handSizes, tricksWon, currentTrick, seatLabel
       <View style={styles.middleRow}>
         {renderOpponent("left")}
         <View style={styles.cluster}>
-          {currentTrick.length === 0 ? (
-            <Text style={styles.centerDash}>—</Text>
-          ) : (
-            currentTrick.map((play, index) => {
-              const offset = CLUSTER_OFFSET[seatPosition(play.player, humanSeat)];
-              return (
-                <View
-                  key={play.player}
-                  style={[
-                    styles.clusterCard,
-                    { top: CLUSTER_CARD_TOP + offset.top, left: CLUSTER_CARD_LEFT + offset.left, zIndex: index },
-                  ]}
-                >
-                  <PlayingCard card={play.card} />
-                </View>
-              );
-            })
-          )}
+          {renderTrickCard("top")}
+          <View style={styles.clusterMiddleRow}>
+            {renderTrickCard("left")}
+            <View style={styles.clusterGap}>
+              {currentTrick.length === 0 && <Text style={styles.centerDash}>—</Text>}
+            </View>
+            {renderTrickCard("right")}
+          </View>
+          {renderTrickCard("bottom")}
         </View>
         {renderOpponent("right")}
       </View>
       <View style={styles.humanPile}>
+        {dealer === humanSeat && <DealerBadge />}
         <TrickPile count={tricksWon[humanSeat]} />
       </View>
     </View>
@@ -106,15 +96,20 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   cluster: {
-    width: CLUSTER_SIZE,
-    height: CLUSTER_SIZE,
+    alignItems: "center",
+  },
+  clusterMiddleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  clusterGap: {
+    width: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  clusterCard: {
-    position: "absolute",
-    top: CLUSTER_CARD_TOP,
-    left: CLUSTER_CARD_LEFT,
+  trickSlot: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
   },
   centerDash: {
     color: "#8fae9c",

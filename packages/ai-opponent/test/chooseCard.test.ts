@@ -6,11 +6,25 @@ import {
   GameState,
   NEGATIVE_HAND_ORDER,
   NegativeHandType,
+  PlayerIndex,
+  Trick,
 } from "rules-engine";
 import { chooseCard } from "../src/chooseCard";
 
 function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
+}
+
+function dummyTrick(winner: PlayerIndex): Trick {
+  return {
+    plays: [
+      { player: 0, card: card("C", 2) },
+      { player: 1, card: card("C", 3) },
+      { player: 2, card: card("C", 4) },
+      { player: 3, card: card("C", 5) },
+    ],
+    winner,
+  };
 }
 
 function withPositiveSetup(state: GameState, trump: Card["suit"] | null = null): GameState {
@@ -107,6 +121,49 @@ describe("chooseCard — negative hands, void discards", () => {
       expect(chooseCard(state, 1)).toEqual(dangerous);
     });
   }
+});
+
+describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winning only at the end", () => {
+  it("safe zone (tricks 1-11): leads the highest card, not the lowest", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLastTwo",
+      completedTricks: Array.from({ length: 5 }, (_, i) => dummyTrick((i % 4) as PlayerIndex)),
+      hands: { 0: [card("S", 2), card("H", 9), card("D", 5)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    expect(chooseCard(state, 0)).toEqual(card("H", 9));
+  });
+
+  it("safe zone (tricks 1-11): plays the highest card even when following suit and it would win", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLastTwo",
+      completedTricks: Array.from({ length: 8 }, (_, i) => dummyTrick((i % 4) as PlayerIndex)),
+      hands: { 0: [], 1: [card("S", 3), card("S", 6), card("S", 10)], 2: [], 3: [] },
+      currentTrick: [{ player: 0, card: card("S", 7) }],
+      currentTurn: 1,
+    };
+    // Normal negative-hand logic would duck under with S3 (safe); the safe-zone override should
+    // instead dump the highest legal card (S10) since winning this trick costs nothing.
+    expect(chooseCard(state, 1)).toEqual(card("S", 10));
+  });
+
+  it("danger zone (tricks 12-13): reverts to the normal avoid-winning strategy", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLastTwo",
+      completedTricks: Array.from({ length: 11 }, (_, i) => dummyTrick((i % 4) as PlayerIndex)), // trick 12 about to be played
+      hands: { 0: [], 1: [card("S", 3), card("S", 6), card("S", 10)], 2: [], 3: [] },
+      currentTrick: [{ player: 0, card: card("S", 7) }],
+      currentTurn: 1,
+    };
+    expect(chooseCard(state, 1)).toEqual(card("S", 3));
+  });
 });
 
 describe("chooseCard — positive hands, not leading", () => {

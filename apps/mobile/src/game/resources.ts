@@ -10,6 +10,7 @@ export const GAME_RESOURCES = {
       bot: "Bot {{number}}",
       yourTurn: "Your turn",
       waiting: "Waiting for {{name}}…",
+      dealer: "Dealer",
       trump: {
         prompt: "Choose trump",
         noTrump: "No Trump",
@@ -26,6 +27,11 @@ export const GAME_RESOURCES = {
         sell: "Accept",
         keep: "Keep trump for myself",
       },
+      auctionSummary: {
+        declared: "{{name}} named trump directly",
+        won: "{{name}} won the auction ({{tricks}} tricks)",
+        trump: "Trump",
+      },
       backToMenu: "Back to Menu",
       gameOver: "Game Over",
       difficulty: {
@@ -40,6 +46,20 @@ export const GAME_RESOURCES = {
       },
       scoreboard: {
         total: "Total",
+        negativeSubtotal: "Negative Subtotal",
+        positiveSubtotal: "Positive Subtotal",
+        winner: "{{name}} wins!",
+        tie: "Tied: {{names}}",
+        rule: {
+          noTricks: "-20/trick",
+          noHearts: "-20/heart",
+          noGentlemen: "-30/card",
+          noLady: "-50/card",
+          noKingOfHearts: "-160",
+          noLastTwo: "-90 x2",
+          positiveUp: "+25/trick",
+          positiveDown: "325-75/trick",
+        },
       },
     },
   },
@@ -49,6 +69,7 @@ export const GAME_RESOURCES = {
       bot: "Bot {{number}}",
       yourTurn: "Tu turno",
       waiting: "Esperando a {{name}}…",
+      dealer: "Repartidor",
       trump: {
         prompt: "Elige el triunfo",
         noTrump: "Sin Triunfo",
@@ -65,6 +86,11 @@ export const GAME_RESOURCES = {
         sell: "Aceptar",
         keep: "Quedarme con el triunfo",
       },
+      auctionSummary: {
+        declared: "{{name}} nombró el triunfo directamente",
+        won: "{{name}} ganó la subasta ({{tricks}} bazas)",
+        trump: "Triunfo",
+      },
       backToMenu: "Volver al Menú",
       gameOver: "Fin del Juego",
       difficulty: {
@@ -79,6 +105,20 @@ export const GAME_RESOURCES = {
       },
       scoreboard: {
         total: "Total",
+        negativeSubtotal: "Subtotal Negativo",
+        positiveSubtotal: "Subtotal Positivo",
+        winner: "¡{{name}} gana!",
+        tie: "Empate: {{names}}",
+        rule: {
+          noTricks: "-20/baza",
+          noHearts: "-20/corazón",
+          noGentlemen: "-30/carta",
+          noLady: "-50/carta",
+          noKingOfHearts: "-160",
+          noLastTwo: "-90 x2",
+          positiveUp: "+25/baza",
+          positiveDown: "325-75/baza",
+        },
       },
     },
   },

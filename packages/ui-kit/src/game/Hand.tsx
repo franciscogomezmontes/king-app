@@ -1,17 +1,21 @@
 import { StyleSheet, View } from "react-native";
 import type { Card } from "rules-engine";
-import { SUITS } from "rules-engine";
 import { CARD_WIDTH, PlayingCard } from "./PlayingCard";
 
 function sameCard(a: Card, b: Card): boolean {
   return a.suit === b.suit && a.rank === b.rank;
 }
 
-/** Groups cards by suit (in rules-engine's canonical S/H/D/C order) then rank ascending, so
- * scanning "what can I play" doesn't mean hunting through a shuffled hand. */
+// Display order only (not rules-engine's own SUITS order, which is S/H/D/C — two blacks then two
+// reds in a row). Alternating colors means adjacent suit groups are never the same color, so the
+// boundary between one suit and the next is obvious even at a glance across a long overlapped fan.
+const DISPLAY_SUIT_ORDER: Card["suit"][] = ["H", "S", "D", "C"];
+
+/** Groups cards by suit (alternating red/black) then rank ascending, so scanning "what can I
+ * play" doesn't mean hunting through a shuffled hand. */
 function sortForDisplay(cards: Card[]): Card[] {
   return [...cards].sort((a, b) => {
-    const suitDiff = SUITS.indexOf(a.suit) - SUITS.indexOf(b.suit);
+    const suitDiff = DISPLAY_SUIT_ORDER.indexOf(a.suit) - DISPLAY_SUIT_ORDER.indexOf(b.suit);
     return suitDiff !== 0 ? suitDiff : a.rank - b.rank;
   });
 }
@@ -41,11 +45,11 @@ export interface HandProps {
 }
 
 /**
- * The human player's own fanned, tappable hand, sorted by suit then rank so it reads as an
- * organized hand instead of dealt-order chaos. Overlaps cards via flexbox negative margins (not
- * absolute positioning — the fan-layout pitfall the king-cross-platform-ui skill calls out) so a
- * 13-card hand still fits a phone-width screen, while keeping at least a MIN_VISIBLE_SLIVER-wide
- * strip of every card tappable.
+ * The human player's own fanned, tappable hand, sorted by suit (alternating red/black) then rank
+ * so it reads as an organized hand instead of dealt-order chaos. Overlaps cards via flexbox
+ * negative margins (not absolute positioning — the fan-layout pitfall the king-cross-platform-ui
+ * skill calls out) so a 13-card hand still fits a phone-width screen, while keeping at least a
+ * MIN_VISIBLE_SLIVER-wide strip of every card tappable.
  *
  * Legal cards get a highlighted border *and* rise slightly out of the fan, rather than dimming
  * everything else — dimming most of a 13-card hand down to near-invisibility read as

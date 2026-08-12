@@ -354,6 +354,252 @@ describe("playCard", () => {
   });
 });
 
+describe("playCard — early hand-completion once a negative hand's outcome is decided", () => {
+  function trickWith(cards: [Card, Card, Card, Card], winner: PlayerIndex): Trick {
+    return {
+      plays: [
+        { player: 0, card: cards[0] },
+        { player: 1, card: cards[1] },
+        { player: 2, card: cards[2] },
+        { player: 3, card: cards[3] },
+      ],
+      winner,
+    };
+  }
+
+  it("noKingOfHearts: ends the instant K♥ is captured, without waiting for 13 tricks", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noKingOfHearts",
+      hands: {
+        0: [{ suit: "H", rank: 13 }],
+        1: [{ suit: "H", rank: 2 }],
+        2: [{ suit: "H", rank: 3 }],
+        3: [{ suit: "H", rank: 4 }],
+      },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    let s = state;
+    s = playCard(s, 0, { suit: "H", rank: 13 });
+    s = playCard(s, 1, { suit: "H", rank: 2 });
+    s = playCard(s, 2, { suit: "H", rank: 3 });
+    s = playCard(s, 3, { suit: "H", rank: 4 });
+
+    expect(s.phase).toBe("hand-complete");
+    expect(s.completedTricks).toHaveLength(1);
+    // Player 0 captured K♥ (highest heart in an all-hearts trick, so they win it): -160.
+    expect(s.cumulativeScores).toEqual({ 0: -160, 1: 0, 2: 0, 3: 0 });
+  });
+
+  it("noGentlemen: ends the instant the 8th king-or-jack is captured, part-way through a hand", () => {
+    // 7 gentlemen captured across 2 already-completed tricks (player 0 gets 4, player 1 gets 3).
+    const priorTricks: Trick[] = [
+      trickWith(
+        [
+          { suit: "S", rank: 13 }, // K♠
+          { suit: "H", rank: 13 }, // K♥
+          { suit: "D", rank: 11 }, // J♦
+          { suit: "C", rank: 11 }, // J♣
+        ],
+        0,
+      ),
+      trickWith(
+        [
+          { suit: "D", rank: 13 }, // K♦
+          { suit: "H", rank: 11 }, // J♥
+          { suit: "C", rank: 13 }, // K♣
+          { suit: "C", rank: 2 }, // filler, not a gentleman
+        ],
+        1,
+      ),
+    ];
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: {
+        0: [{ suit: "S", rank: 11 }], // J♠ — the 8th gentleman
+        1: [{ suit: "D", rank: 2 }],
+        2: [{ suit: "D", rank: 3 }],
+        3: [{ suit: "D", rank: 4 }],
+      },
+      completedTricks: priorTricks,
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    let s = state;
+    s = playCard(s, 0, { suit: "S", rank: 11 }); // leads J♠
+    s = playCard(s, 1, { suit: "D", rank: 2 }); // void in spades, free discard
+    s = playCard(s, 2, { suit: "D", rank: 3 });
+    s = playCard(s, 3, { suit: "D", rank: 4 });
+
+    expect(s.phase).toBe("hand-complete");
+    expect(s.completedTricks).toHaveLength(3); // not all 13
+    // Player 0: 4 (trick 1) + 1 (J♠ just now) = 5 gentlemen -> -150. Player 1: 3 -> -90.
+    expect(s.cumulativeScores).toEqual({ 0: -150, 1: -90, 2: 0, 3: 0 });
+  });
+
+  it("noLady: ends the instant the 4th queen is captured", () => {
+    const priorTricks: Trick[] = [
+      trickWith(
+        [
+          { suit: "S", rank: 12 }, // Q♠
+          { suit: "H", rank: 12 }, // Q♥
+          { suit: "D", rank: 12 }, // Q♦
+          { suit: "C", rank: 2 }, // filler
+        ],
+        2,
+      ),
+    ];
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLady",
+      hands: {
+        0: [{ suit: "C", rank: 12 }], // Q♣ — the 4th queen
+        1: [{ suit: "C", rank: 3 }],
+        2: [{ suit: "C", rank: 4 }],
+        3: [{ suit: "C", rank: 5 }],
+      },
+      completedTricks: priorTricks,
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    let s = state;
+    s = playCard(s, 0, { suit: "C", rank: 12 });
+    s = playCard(s, 1, { suit: "C", rank: 3 });
+    s = playCard(s, 2, { suit: "C", rank: 4 });
+    s = playCard(s, 3, { suit: "C", rank: 5 });
+
+    expect(s.phase).toBe("hand-complete");
+    expect(s.completedTricks).toHaveLength(2);
+    // Player 2 already had 3 queens (-150); player 0's club trick (highest club C12) adds Q♣ (-50).
+    expect(s.cumulativeScores).toEqual({ 0: -50, 1: 0, 2: -150, 3: 0 });
+  });
+
+  it("noHearts: ends the instant the 13th (final) heart is captured", () => {
+    const priorTricks: Trick[] = [
+      trickWith(
+        [{ suit: "H", rank: 2 }, { suit: "H", rank: 3 }, { suit: "H", rank: 4 }, { suit: "H", rank: 5 }],
+        0,
+      ),
+      trickWith(
+        [{ suit: "H", rank: 6 }, { suit: "H", rank: 7 }, { suit: "H", rank: 8 }, { suit: "H", rank: 9 }],
+        1,
+      ),
+      trickWith(
+        [{ suit: "H", rank: 10 }, { suit: "H", rank: 11 }, { suit: "H", rank: 12 }, { suit: "H", rank: 13 }],
+        2,
+      ),
+    ];
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noHearts",
+      hands: {
+        0: [{ suit: "C", rank: 2 }],
+        1: [{ suit: "C", rank: 3 }],
+        2: [{ suit: "C", rank: 4 }],
+        3: [{ suit: "H", rank: 14 }], // the 13th and final heart — all they have left, so legal to lead
+      },
+      completedTricks: priorTricks,
+      currentTrick: [],
+      currentTurn: 3,
+    };
+    let s = state;
+    s = playCard(s, 3, { suit: "H", rank: 14 });
+    s = playCard(s, 0, { suit: "C", rank: 2 });
+    s = playCard(s, 1, { suit: "C", rank: 3 });
+    s = playCard(s, 2, { suit: "C", rank: 4 });
+
+    expect(s.phase).toBe("hand-complete");
+    expect(s.completedTricks).toHaveLength(4); // not all 13
+    expect(s.cumulativeScores).toEqual({ 0: -80, 1: -80, 2: -80, 3: -20 });
+  });
+
+  it("does NOT end early while the triggering condition isn't met yet (boundary check)", () => {
+    // Only 6 of the 8 gentlemen captured so far — hand must continue.
+    const priorTricks: Trick[] = [
+      trickWith(
+        [
+          { suit: "S", rank: 13 },
+          { suit: "H", rank: 13 },
+          { suit: "D", rank: 11 },
+          { suit: "C", rank: 11 },
+        ],
+        0,
+      ),
+      trickWith(
+        [
+          { suit: "D", rank: 13 },
+          { suit: "H", rank: 11 },
+          { suit: "C", rank: 2 }, // filler, not a gentleman (only 2 gentlemen in this trick)
+          { suit: "S", rank: 3 }, // filler
+        ],
+        1,
+      ),
+    ];
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: {
+        0: [{ suit: "S", rank: 2 }], // no gentlemen involved this trick
+        1: [{ suit: "S", rank: 4 }],
+        2: [{ suit: "S", rank: 5 }],
+        3: [{ suit: "S", rank: 6 }],
+      },
+      completedTricks: priorTricks,
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    let s = state;
+    s = playCard(s, 0, { suit: "S", rank: 2 });
+    s = playCard(s, 1, { suit: "S", rank: 4 });
+    s = playCard(s, 2, { suit: "S", rank: 5 });
+    s = playCard(s, 3, { suit: "S", rank: 6 });
+
+    expect(s.phase).toBe("playing"); // still going — only 6 gentlemen captured, not 8
+    expect(s.completedTricks).toHaveLength(3);
+  });
+
+  it("does not apply to No Tricks or No Last Two Tricks — every trick can still matter right to the end", () => {
+    // 13 tricks' worth of "danger" happening early doesn't exist for these two hand types, so a
+    // hand-history entry should never appear before the real 13th trick. Spot-check via a
+    // negative-hand-agnostic trick sequence that would trip every other early-stop condition at
+    // once (all gentlemen, all queens, K♥, and 13 hearts already gone) and confirm noTricks still
+    // requires the full 13.
+    const heavyTrick: Trick = trickWith(
+      [
+        { suit: "H", rank: 13 }, // K♥
+        { suit: "H", rank: 12 }, // Q♥
+        { suit: "H", rank: 11 }, // J♥
+        { suit: "H", rank: 10 },
+      ],
+      0,
+    );
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noTricks",
+      completedTricks: [heavyTrick],
+      hands: { 0: [{ suit: "C", rank: 2 }], 1: [{ suit: "C", rank: 3 }], 2: [{ suit: "C", rank: 4 }], 3: [{ suit: "C", rank: 5 }] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    let s = state;
+    s = playCard(s, 0, { suit: "C", rank: 2 });
+    s = playCard(s, 1, { suit: "C", rank: 3 });
+    s = playCard(s, 2, { suit: "C", rank: 4 });
+    s = playCard(s, 3, { suit: "C", rank: 5 });
+
+    expect(s.phase).toBe("playing");
+    expect(s.completedTricks).toHaveLength(2);
+  });
+});
+
 describe("advanceHand", () => {
   it("moves to the next hand: handIndex+1, HAND_SEQUENCE-matched handType, rotated dealer, awaiting-deal", () => {
     const state: GameState = { ...createGame(DEFAULT_GAME_RULES, 1), phase: "hand-complete" };

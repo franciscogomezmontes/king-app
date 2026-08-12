@@ -62,6 +62,12 @@ function mostDangerous(cards: Card[], handType: NegativeHandType): Card {
   return cards.reduce((best, c) => (dangerScore(c, handType) > dangerScore(best, handType) ? c : best));
 }
 
+// No Last Two Tricks: only the final 2 tricks (13 total) carry any penalty risk. Tricks before
+// that are free to win — the skill's own guidance: "track trick count remaining; bias toward not
+// winning tricks 12 and 13 in particular, which requires the bot to reason about trick-count, not
+// just card rank."
+const NO_LAST_TWO_SAFE_TRICKS = 11;
+
 /**
  * Picks a card to play for `player`, given the full game state. Tier 1 heuristic bot — see
  * .claude/skills/king-ai-opponent. Always legal: every branch below chooses only from
@@ -78,6 +84,14 @@ export function chooseCard(state: GameState, player: PlayerIndex): Card {
 
   const ruleSet = currentRuleSet(state);
   const isPositive = state.handType === "positive";
+
+  if (state.handType === "noLastTwo" && state.completedTricks.length < NO_LAST_TWO_SAFE_TRICKS) {
+    // Winning right now is free — shed the highest card while there's no cost to it, rather than
+    // hoarding high cards defensively (which only leaves them stuck holding danger once tricks
+    // 12-13 actually arrive). Applies whether leading, following, or discarding void: dumping the
+    // single highest legal card is always the right move here, no other logic needed.
+    return highestCard(legal, ruleSet.backwards);
+  }
 
   if (state.currentTrick.length === 0) {
     // Leading: "would currently win" is vacuous (nothing to beat yet), so this is handled

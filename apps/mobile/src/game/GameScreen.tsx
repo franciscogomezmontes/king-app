@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
-import { Hand, Scoreboard, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
+import { AuctionSummary, Hand, Scoreboard, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
@@ -107,12 +107,16 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
         />
         <Table
           humanSeat={HUMAN_SEAT}
+          dealer={game.dealer}
           handSizes={handSizes}
           tricksWon={tricksWon}
           currentTrick={displayTrick}
           seatLabels={seatLabels}
           currentTurn={decision.kind === "play" ? decision.player : null}
         />
+        {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
+          <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
+        )}
         <DecisionPanel
           game={game}
           decision={decision}
@@ -285,10 +289,18 @@ function GameOverView({
   onExit: () => void;
 }) {
   const { t } = useTranslation();
+  const bestScore = Math.max(...ALL_SEATS.map((seat) => game.cumulativeScores[seat]));
+  const winners = ALL_SEATS.filter((seat) => game.cumulativeScores[seat] === bestScore);
+  const winnerLine =
+    winners.length === 1
+      ? t("game:scoreboard.winner", { name: seatLabels[winners[0]] })
+      : t("game:scoreboard.tie", { names: winners.map((seat) => seatLabels[seat]).join(", ") });
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
         <Text style={styles.title}>{t("game:gameOver")}</Text>
+        <Text style={styles.winnerText}>{winnerLine}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Pressable style={styles.primaryButton} onPress={onExit}>
           <Text style={styles.primaryButtonLabel}>{t("game:backToMenu")}</Text>
@@ -322,6 +334,13 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#f5e6c8",
     marginBottom: 16,
+  },
+  winnerText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#f2c14e",
+    marginBottom: 12,
+    textAlign: "center",
   },
   panel: {
     alignItems: "center",
