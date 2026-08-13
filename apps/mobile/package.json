@@ -13,10 +13,13 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.25.0",
+    "@expo-google-fonts/cormorant-garamond": "0.2.3",
+    "@expo-google-fonts/source-sans-3": "0.2.3",
     "@expo/metro-runtime": "~4.0.1",
     "@react-native-async-storage/async-storage": "1.23.1",
     "ai-opponent": "workspace:*",
     "expo": "~52.0.0",
+    "expo-font": "~13.0.4",
     "expo-localization": "~16.0.1",
     "expo-status-bar": "~2.0.0",
     "react": "18.3.1",

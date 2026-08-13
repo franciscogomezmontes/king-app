@@ -1,16 +1,27 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
 import { DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
-import { AuctionSummary, Hand, Scoreboard, ScorePanel, SUIT_SYMBOLS, Table, useTranslation } from "ui-kit";
+import {
+  AuctionSummary,
+  Button,
+  Hand,
+  Panel,
+  Scoreboard,
+  ScorePanel,
+  SUIT_SYMBOLS,
+  Table,
+  colors,
+  fonts,
+  layout,
+  radii,
+  spacing,
+  type,
+  useTranslation,
+} from "ui-kit";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 const HUMAN_SEAT: PlayerIndex = 0;
-
-// Beyond this viewport width, stop growing the content and center it instead — matches App.tsx's
-// mode picker. Without this cap, "width: 100%" below stretches edge-to-edge on a wide desktop
-// browser, spreading the opponent seats and trick area apart instead of keeping the table compact.
-const MAX_CONTENT_WIDTH = 480;
 
 export interface GameScreenProps {
   onExit: () => void;
@@ -30,20 +41,27 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <Text style={styles.title}>{t("game:difficulty.label")}</Text>
-        <Pressable style={styles.primaryButton} onPress={() => onChoose("easy")}>
-          <Text style={styles.primaryButtonLabel}>{t("game:difficulty.easy")}</Text>
-        </Pressable>
-        <Pressable style={styles.primaryButton} onPress={() => onChoose("normal")}>
-          <Text style={styles.primaryButtonLabel}>{t("game:difficulty.normal")}</Text>
-        </Pressable>
-        <Pressable style={styles.linkButton} onPress={onExit}>
-          <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
-        </Pressable>
+        <Button label={t("game:difficulty.easy")} onPress={() => onChoose("easy")} />
+        <Button label={t("game:difficulty.normal")} onPress={() => onChoose("normal")} />
+        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
     </SafeAreaView>
   );
+}
+
+function turnMessage(
+  decision: ReturnType<typeof pendingDecision>,
+  isHumanPlaying: boolean,
+  seatLabels: Record<PlayerIndex, string>,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  if (isHumanPlaying) return t("game:yourTurn");
+  if ("player" in decision && decision.player !== HUMAN_SEAT) {
+    return t("game:waiting", { name: seatLabels[decision.player] });
+  }
+  return "";
 }
 
 function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: () => void }) {
@@ -93,11 +111,9 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
-          <Pressable onPress={onExit}>
-            <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
-          </Pressable>
+          <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
         </View>
         <ScorePanel
           handType={game.handType}
@@ -126,7 +142,7 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
           passBid={passBid}
           dealerDecide={dealerDecide}
         />
-        <Text style={styles.turnIndicator}>{isHumanPlaying ? t("game:yourTurn") : ""}</Text>
+        <Text style={styles.turnIndicator}>{turnMessage(decision, isHumanPlaying, seatLabels, t)}</Text>
         <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
       </View>
     </SafeAreaView>
@@ -151,7 +167,7 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
 
   if (decision.kind === "trump" && decision.player === HUMAN_SEAT) {
     return (
-      <View style={styles.panel}>
+      <Panel style={styles.panel}>
         <Text style={styles.prompt}>{t("game:trump.prompt")}</Text>
         <View style={styles.row}>
           {SUITS.map((suit) => (
@@ -185,18 +201,16 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
           </Pressable>
         )}
         {decision.canOpenAuction && (
-          <Pressable style={styles.secondaryButton} onPress={openAuction}>
-            <Text style={styles.secondaryButtonLabel}>{t("game:trump.openAuction")}</Text>
-          </Pressable>
+          <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.inlineButton} />
         )}
-      </View>
+      </Panel>
     );
   }
 
   if (decision.kind === "bid" && decision.player === HUMAN_SEAT) {
     const currentHigh = highestBid(game.positiveSetup?.bids ?? [])?.tricks ?? 0;
     return (
-      <View style={styles.panel}>
+      <Panel style={styles.panel}>
         <Text style={styles.prompt}>
           {currentHigh > 0 ? t("game:auction.currentBid", { tricks: currentHigh }) : t("game:auction.noBids")}
         </Text>
@@ -207,10 +221,12 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
             value={bidText}
             onChangeText={setBidText}
             placeholder={t("game:auction.bidPrompt")}
-            placeholderTextColor="#8fae9c"
+            placeholderTextColor={colors.muted}
           />
-          <Pressable
-            style={styles.secondaryButton}
+          <Button
+            label={t("game:auction.bid")}
+            variant="secondary"
+            style={styles.inlineButton}
             onPress={() => {
               const tricks = parseInt(bidText, 10);
               if (Number.isFinite(tricks)) {
@@ -218,31 +234,23 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
                 setBidText("");
               }
             }}
-          >
-            <Text style={styles.secondaryButtonLabel}>{t("game:auction.bid")}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={passBid}>
-            <Text style={styles.secondaryButtonLabel}>{t("game:auction.pass")}</Text>
-          </Pressable>
+          />
+          <Button label={t("game:auction.pass")} onPress={passBid} variant="secondary" style={styles.inlineButton} />
         </View>
-      </View>
+      </Panel>
     );
   }
 
   if (decision.kind === "dealer-decide" && decision.player === HUMAN_SEAT) {
     const top = highestBid(game.positiveSetup?.bids ?? []);
     return (
-      <View style={styles.panel}>
+      <Panel style={styles.panel}>
         <Text style={styles.prompt}>{t("game:auction.dealerPrompt", { tricks: top?.tricks ?? 0 })}</Text>
         <View style={styles.row}>
-          <Pressable style={styles.secondaryButton} onPress={() => dealerDecide(true)}>
-            <Text style={styles.secondaryButtonLabel}>{t("game:auction.sell")}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={() => dealerDecide(false)}>
-            <Text style={styles.secondaryButtonLabel}>{t("game:auction.keep")}</Text>
-          </Pressable>
+          <Button label={t("game:auction.sell")} onPress={() => dealerDecide(true)} variant="secondary" style={styles.inlineButton} />
+          <Button label={t("game:auction.keep")} onPress={() => dealerDecide(false)} variant="secondary" style={styles.inlineButton} />
         </View>
-      </View>
+      </Panel>
     );
   }
 
@@ -265,15 +273,11 @@ function HandCompleteView({
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <Text style={styles.title}>{t("game:handComplete.title", { number: game.handIndex + 1 })}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
-        <Pressable style={styles.primaryButton} onPress={onContinue}>
-          <Text style={styles.primaryButtonLabel}>{t("game:handComplete.continue")}</Text>
-        </Pressable>
-        <Pressable style={styles.linkButton} onPress={onExit}>
-          <Text style={styles.linkButtonLabel}>{t("game:backToMenu")}</Text>
-        </Pressable>
+        <Button label={t("game:handComplete.continue")} onPress={onContinue} />
+        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
     </SafeAreaView>
   );
@@ -298,13 +302,11 @@ function GameOverView({
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <Text style={styles.title}>{t("game:gameOver")}</Text>
         <Text style={styles.winnerText}>{winnerLine}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
-        <Pressable style={styles.primaryButton} onPress={onExit}>
-          <Text style={styles.primaryButtonLabel}>{t("game:backToMenu")}</Text>
-        </Pressable>
+        <Button label={t("game:backToMenu")} onPress={onExit} />
       </View>
     </SafeAreaView>
   );
@@ -313,13 +315,11 @@ function GameOverView({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b3d2e",
+    backgroundColor: colors.felt,
     alignItems: "center",
     paddingTop: 48,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
-  // Caps + centers everything on wide viewports; on a phone (narrower than the cap) this is just
-  // 100% width, so nothing changes there — same pattern as App.tsx's mode picker.
   content: {
     width: "100%",
     alignSelf: "center",
@@ -327,46 +327,48 @@ const styles = StyleSheet.create({
   },
   header: {
     width: "100%",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
+    alignItems: "flex-start",
+  },
+  headerLink: {
+    minWidth: 0,
+    paddingHorizontal: 0,
+    alignSelf: "flex-start",
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#f5e6c8",
-    marginBottom: 16,
+    ...type.displayMd,
+    marginBottom: spacing.lg,
   },
   winnerText: {
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "700",
-    color: "#f2c14e",
-    marginBottom: 12,
+    color: colors.gold,
+    marginBottom: spacing.md,
     textAlign: "center",
   },
   panel: {
     alignItems: "center",
-    backgroundColor: "#0f4d38",
-    borderRadius: 12,
-    padding: 12,
-    marginVertical: 8,
-    width: "100%",
+    marginVertical: spacing.sm,
   },
   prompt: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
     textAlign: "center",
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: spacing.sm,
     flexWrap: "wrap",
     justifyContent: "center",
   },
   trumpButton: {
-    backgroundColor: "#f5e6c8",
-    borderRadius: 8,
+    backgroundColor: colors.cream,
+    borderRadius: radii.md,
     width: 44,
     height: 44,
     alignItems: "center",
@@ -374,64 +376,44 @@ const styles = StyleSheet.create({
   },
   trumpButtonLabel: {
     fontSize: 20,
+    color: colors.ink,
   },
   trumpButtonLabelSmall: {
     fontSize: 11,
+    fontFamily: fonts.bodyBold,
     fontWeight: "700",
     textAlign: "center",
+    color: colors.ink,
   },
   toggle: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     paddingVertical: 4,
   },
   toggleLabel: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 13,
   },
-  secondaryButton: {
-    backgroundColor: "#1c7a53",
-    borderRadius: 8,
-    paddingVertical: 8,
+  inlineButton: {
+    minWidth: 0,
+    paddingVertical: spacing.sm,
     paddingHorizontal: 14,
   },
-  secondaryButtonLabel: {
-    color: "#f5e6c8",
-    fontWeight: "600",
-  },
-  primaryButton: {
-    backgroundColor: "#0f4d38",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginVertical: 8,
-    minWidth: 160,
-    alignItems: "center",
-  },
-  primaryButtonLabel: {
-    color: "#f5e6c8",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  linkButton: {
-    marginTop: 16,
-  },
-  linkButtonLabel: {
-    color: "#8fae9c",
-    fontSize: 14,
-  },
   bidInput: {
-    backgroundColor: "#f5e6c8",
-    borderRadius: 8,
+    backgroundColor: colors.cream,
+    borderRadius: radii.md,
     paddingHorizontal: 10,
     paddingVertical: 6,
     width: 90,
-    color: "#1a1a1a",
+    color: colors.ink,
+    fontFamily: fonts.body,
   },
   turnIndicator: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "600",
     minHeight: 18,
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
 });

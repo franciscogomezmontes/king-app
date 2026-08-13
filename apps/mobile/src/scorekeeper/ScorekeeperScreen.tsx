@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { HandType, NEGATIVE_HAND_EXPECTED_COUNT, PlayerIndex, POSITIVE_HAND_EXPECTED_TRICKS, validateHandCounts } from "rules-engine";
-import { CountStepper, Scoreboard, ScoreboardEntry, useTranslation } from "ui-kit";
+import { Button, CountStepper, Scoreboard, ScoreboardEntry, colors, fonts, layout, spacing, type, useTranslation } from "ui-kit";
 import { ScorekeeperState, currentHandType, isGameComplete } from "./state";
 import { useScorekeeper } from "./useScorekeeper";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
-
-// Matches App.tsx's mode picker / GameScreen's own cap — stays compact on a phone, doesn't stretch
-// edge-to-edge on a wide desktop browser.
-const MAX_CONTENT_WIDTH = 480;
 
 export interface ScorekeeperScreenProps {
   onExit: () => void;
@@ -62,15 +58,11 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
   if (resumeCandidate !== null) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
           <Text style={styles.title}>{t("scorekeeper:resume.title")}</Text>
           <Text style={styles.body}>{t("scorekeeper:resume.body")}</Text>
-          <Pressable style={styles.primaryButton} onPress={resume}>
-            <Text style={styles.primaryButtonLabel}>{t("scorekeeper:resume.resume")}</Text>
-          </Pressable>
-          <Pressable style={styles.secondaryButton} onPress={startNew}>
-            <Text style={styles.secondaryButtonLabel}>{t("scorekeeper:resume.startNew")}</Text>
-          </Pressable>
+          <Button label={t("scorekeeper:resume.resume")} onPress={resume} />
+          <Button label={t("scorekeeper:resume.startNew")} onPress={startNew} variant="secondary" />
         </View>
       </SafeAreaView>
     );
@@ -86,22 +78,18 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
 
     return (
       <SafeAreaView style={styles.container}>
-        <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
           <Text style={styles.title}>{t("scorekeeper:gameOver")}</Text>
           <Text style={styles.winnerText}>{winnerLine}</Text>
           <Scoreboard handHistory={toScoreboardEntries(state)} seatLabels={labels} />
-          <Pressable
-            style={styles.primaryButton}
+          <Button
+            label={t("scorekeeper:newGame")}
             onPress={() => {
               startNew();
               setShowingCheckpoint(false);
             }}
-          >
-            <Text style={styles.primaryButtonLabel}>{t("scorekeeper:newGame")}</Text>
-          </Pressable>
-          <Pressable style={styles.linkButton} onPress={onExit}>
-            <Text style={styles.linkButtonLabel}>{t("scorekeeper:backToMenu")}</Text>
-          </Pressable>
+          />
+          <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" />
         </View>
       </SafeAreaView>
     );
@@ -110,15 +98,11 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
   if (showingCheckpoint) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+        <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
           <Text style={styles.title}>{t("scorekeeper:hand", { number: state.handIndex })}</Text>
           <Scoreboard handHistory={toScoreboardEntries(state)} seatLabels={labels} />
-          <Pressable style={styles.primaryButton} onPress={() => setShowingCheckpoint(false)}>
-            <Text style={styles.primaryButtonLabel}>{t("scorekeeper:nextHand")}</Text>
-          </Pressable>
-          <Pressable style={styles.linkButton} onPress={onExit}>
-            <Text style={styles.linkButtonLabel}>{t("scorekeeper:backToMenu")}</Text>
-          </Pressable>
+          <Button label={t("scorekeeper:nextHand")} onPress={() => setShowingCheckpoint(false)} />
+          <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" />
         </View>
       </SafeAreaView>
     );
@@ -137,11 +121,9 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: MAX_CONTENT_WIDTH }]}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
-          <Pressable onPress={onExit}>
-            <Text style={styles.linkButtonLabel}>{t("scorekeeper:backToMenu")}</Text>
-          </Pressable>
+          <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
         </View>
         <Text style={styles.hand}>{t("scorekeeper:hand", { number: state.handIndex + 1 })}</Text>
         <Text style={styles.title}>{handName(t, handType)}</Text>
@@ -174,15 +156,13 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
           </Pressable>
         )}
 
-        <Pressable
-          style={styles.primaryButton}
+        <Button
+          label={t("scorekeeper:confirmHand")}
           onPress={() => {
             confirmHand();
             setShowingCheckpoint(true);
           }}
-        >
-          <Text style={styles.primaryButtonLabel}>{t("scorekeeper:confirmHand")}</Text>
-        </Pressable>
+        />
       </View>
     </SafeAreaView>
   );
@@ -191,10 +171,10 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0b3d2e",
+    backgroundColor: colors.felt,
     alignItems: "center",
     paddingTop: 48,
-    paddingHorizontal: 16,
+    paddingHorizontal: spacing.lg,
   },
   content: {
     width: "100%",
@@ -203,30 +183,35 @@ const styles = StyleSheet.create({
   },
   header: {
     width: "100%",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
+    alignItems: "flex-start",
+  },
+  headerLink: {
+    minWidth: 0,
+    paddingHorizontal: 0,
+    alignSelf: "flex-start",
   },
   hand: {
-    color: "#8fae9c",
+    color: colors.muted,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "600",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#f5e6c8",
+    ...type.title,
     textAlign: "center",
     marginTop: 2,
   },
   unitLabel: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 13,
     marginTop: 4,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     textAlign: "center",
   },
   body: {
-    color: "#c9d8cf",
-    fontSize: 14,
+    ...type.body,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -238,61 +223,33 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   validation: {
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "600",
-    marginTop: 16,
+    marginTop: spacing.lg,
     textAlign: "center",
   },
   validationOk: {
-    color: "#4caf50",
+    color: colors.validationOk,
   },
   validationMismatch: {
-    color: "#e0a53a",
+    color: colors.validationWarn,
   },
   toggle: {
-    marginTop: 12,
+    marginTop: spacing.md,
     paddingVertical: 4,
   },
   toggleLabel: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 13,
   },
-  primaryButton: {
-    backgroundColor: "#0f4d38",
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginVertical: 8,
-    minWidth: 160,
-    alignItems: "center",
-  },
-  primaryButtonLabel: {
-    color: "#f5e6c8",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  secondaryButton: {
-    backgroundColor: "#1c7a53",
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  secondaryButtonLabel: {
-    color: "#f5e6c8",
-    fontWeight: "600",
-  },
-  linkButton: {
-    marginTop: 16,
-  },
-  linkButtonLabel: {
-    color: "#8fae9c",
-    fontSize: 14,
-  },
   winnerText: {
+    fontFamily: fonts.bodyBold,
     fontSize: 16,
     fontWeight: "700",
-    color: "#f2c14e",
-    marginBottom: 12,
+    color: colors.gold,
+    marginBottom: spacing.md,
     textAlign: "center",
   },
 });
