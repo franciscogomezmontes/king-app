@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { colors, fonts, radii } from "../theme";
 
 export interface CountStepperProps {
   /** Current count (0 to `max`). */
@@ -86,7 +87,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   label: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 12,
     marginBottom: 4,
   },
@@ -98,17 +100,18 @@ const styles = StyleSheet.create({
   button: {
     width: 36,
     height: 36,
-    borderRadius: 8,
-    backgroundColor: "#1c7a53",
+    borderRadius: radii.md,
+    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonDisabled: {
-    backgroundColor: "#0f4d38",
+    backgroundColor: colors.surface,
     opacity: 0.5,
   },
   buttonLabel: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodyBold,
     fontSize: 20,
     fontWeight: "700",
     lineHeight: 22,
@@ -119,18 +122,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   value: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodyBold,
     fontSize: 20,
     fontWeight: "700",
   },
   input: {
     minWidth: 40,
     textAlign: "center",
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodyBold,
     fontSize: 20,
     fontWeight: "700",
     borderBottomWidth: 2,
-    borderBottomColor: "#f2c14e",
+    borderBottomColor: colors.gold,
     padding: 0,
   },
 });

@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { colors, fonts, radii, spacing } from "../theme";
 import { CardBack } from "./CardBack";
 import { DealerBadge } from "./DealerBadge";
 import { TrickPile } from "./TrickPile";
@@ -19,7 +20,7 @@ export interface OpponentSeatProps {
 export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer }: OpponentSeatProps) {
   return (
     <View style={[styles.container, isCurrentTurn && styles.active]}>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, isCurrentTurn && styles.labelActive]}>{label}</Text>
       <View style={styles.stack}>
         <CardBack />
         <Text style={styles.count}>×{cardCount}</Text>
@@ -33,17 +34,24 @@ export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDea
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    padding: 8,
-    borderRadius: 10,
+    padding: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   active: {
-    backgroundColor: "#1c7a53",
+    backgroundColor: colors.accent,
+    borderColor: colors.gold,
   },
   label: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
     fontSize: 13,
     fontWeight: "600",
     marginBottom: 4,
+  },
+  labelActive: {
+    color: colors.gold,
   },
   stack: {
     flexDirection: "row",
@@ -51,7 +59,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   count: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 13,
   },
 });

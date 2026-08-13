@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { HandType, PlayerIndex } from "rules-engine";
 import { useTranslation } from "../i18n";
+import { colors, fonts, spacing } from "../theme";
 
 export interface ScorePanelProps {
   handType: HandType;
@@ -35,12 +36,13 @@ export function ScorePanel({ handType, handNumber, scores, seatLabels }: ScorePa
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   handName: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.displaySemi,
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "600",
     marginBottom: 4,
   },
   scores: {
@@ -48,7 +50,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   score: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 13,
   },
 });

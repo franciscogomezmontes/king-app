@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
+import { colors, fonts } from "../theme";
 
 export interface TrickPileProps {
   /** How many tricks this player has won so far this hand. */
@@ -45,16 +46,18 @@ const styles = StyleSheet.create({
     width: MINI_WIDTH,
     height: MINI_HEIGHT,
     borderRadius: 3,
-    backgroundColor: "#0f4d38",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#f5e6c8",
+    borderColor: colors.gold,
   },
   miniCardBack: {
     left: 0,
     top: 2,
+    borderColor: colors.cream,
   },
   count: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.bodySemi,
     fontSize: 12,
     fontWeight: "600",
   },

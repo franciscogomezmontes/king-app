@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import type { HandType, PlayerIndex } from "rules-engine";
 import { NEGATIVE_HAND_ORDER } from "rules-engine";
 import { useTranslation } from "../i18n";
+import { colors, fonts } from "../theme";
 
 // HAND_SEQUENCE is fixed: all six negative hands, then all four positive hands — so the subtotal
 // boundaries are fixed indices, not something to infer from neighboring entries. (A "does the next
@@ -143,7 +144,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1c7a53",
+    borderBottomColor: colors.accent,
   },
   handCell: {
     flex: 2.4,
@@ -151,32 +152,37 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   handText: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.body,
     fontSize: 13,
     textAlign: "left",
   },
   ruleText: {
-    color: "#8fae9c",
+    color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 10,
     textAlign: "left",
   },
   cell: {
     flex: 1,
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.body,
     fontSize: 13,
     textAlign: "center",
   },
   headerText: {
+    fontFamily: fonts.bodyBold,
     fontWeight: "700",
-    color: "#c9d8cf",
+    color: colors.secondaryText,
     fontSize: 12,
   },
   subtotalRow: {
-    backgroundColor: "#0f4d38",
+    backgroundColor: colors.surface,
   },
   subtotalText: {
+    fontFamily: fonts.bodySemi,
     fontWeight: "600",
-    color: "#c9d8cf",
+    color: colors.secondaryText,
     fontSize: 12,
   },
   totalRow: {
@@ -184,10 +190,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 6,
     borderTopWidth: 2,
-    borderTopColor: "#f2c14e",
+    borderTopColor: colors.gold,
   },
   totalText: {
+    fontFamily: fonts.bodyBold,
     fontWeight: "700",
-    color: "#f2c14e",
+    color: colors.gold,
   },
 });

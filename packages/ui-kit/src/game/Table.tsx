@@ -1,5 +1,6 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { Card, PlayerIndex } from "rules-engine";
+import { colors, radii, spacing } from "../theme";
 import { DealerBadge } from "./DealerBadge";
 import { OpponentSeat } from "./OpponentSeat";
 import { CARD_HEIGHT, CARD_WIDTH, PlayingCard } from "./PlayingCard";
@@ -26,9 +27,8 @@ export interface TableProps {
  * The current trick's cards collect at the center of the table, laid out in a small non-
  * overlapping plus/cross (one slot per compass direction) rather than stacked on top of each
  * other — every card's corner index stays fully visible at all times, including the first card
- * played, not just whichever one ends up on top of a pile. Still reads as "the trick, in the
- * middle of the table" (the standard trick-taking card game convention) without trading away
- * legibility for it.
+ * played, not just whichever one ends up on top of a pile. An empty trick is a quiet felt well,
+ * not an em-dash.
  */
 export function Table({ humanSeat, dealer, handSizes, tricksWon, currentTrick, seatLabels, currentTurn }: TableProps) {
   const opponents = ([0, 1, 2, 3] as PlayerIndex[]).filter((seat) => seat !== humanSeat);
@@ -55,7 +55,7 @@ export function Table({ humanSeat, dealer, handSizes, tricksWon, currentTrick, s
   }
 
   return (
-    <View style={styles.table}>
+    <View style={styles.felt}>
       <View style={styles.topRow}>{renderOpponent("top")}</View>
       <View style={styles.middleRow}>
         {renderOpponent("left")}
@@ -64,7 +64,7 @@ export function Table({ humanSeat, dealer, handSizes, tricksWon, currentTrick, s
           <View style={styles.clusterMiddleRow}>
             {renderTrickCard("left")}
             <View style={styles.clusterGap}>
-              {currentTrick.length === 0 && <Text style={styles.centerDash}>—</Text>}
+              {currentTrick.length === 0 && <View style={styles.feltWell} />}
             </View>
             {renderTrickCard("right")}
           </View>
@@ -81,9 +81,15 @@ export function Table({ humanSeat, dealer, handSizes, tricksWon, currentTrick, s
 }
 
 const styles = StyleSheet.create({
-  table: {
+  felt: {
     width: "100%",
     alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   topRow: {
     alignItems: "center",
@@ -107,13 +113,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  feltWell: {
+    width: 22,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: colors.feltWell,
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
+  },
   trickSlot: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-  },
-  centerDash: {
-    color: "#8fae9c",
-    fontSize: 14,
   },
   humanPile: {
     alignItems: "center",
