@@ -40,6 +40,10 @@ function handName(t: ReturnType<typeof useTranslation>["t"], handType: HandType)
   return handType === "positive" ? t("rules:positiveHand.name") : t(`rules:negativeHands.${handType}.name`);
 }
 
+function assignedTotal(draftCounts: Record<PlayerIndex, number>): number {
+  return ALL_SEATS.reduce((sum, seat) => sum + draftCounts[seat], 0);
+}
+
 /** Top-level Scorekeeper screen: a digital scorepad for 4 friends playing with physical cards —
  * no AI, no digital card play, just structured number entry per hand mirroring the family's
  * King Scorekeeper.xlsx, with a persistent session so a phone lock or browser refresh mid-game
@@ -110,14 +114,23 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
 
   const handType = currentHandType(state);
   if (handType === null) {
-    // isGameComplete but the checkpoint already closed — shouldn't normally be reachable (the
-    // game-complete branch above catches it first right after the final confirm), but keep this
-    // as a safe fallback rather than rendering an entry form with no hand to enter.
     return null;
   }
 
   const max = expectedCountFor(handType);
   const validation = validateHandCounts(handType, state.draftCounts);
+  const assigned = assignedTotal(state.draftCounts);
+  const left = validation.expectedTotal - assigned;
+  const validationCopy =
+    left > 0
+      ? t("scorekeeper:validation.remaining", { count: left })
+      : left === 0 && validation.ok
+        ? t("scorekeeper:validation.ok", { expected: validation.expectedTotal })
+        : t("scorekeeper:validation.mismatch", {
+            count: Math.abs(left),
+            expected: validation.expectedTotal,
+          });
+  const validationTone = left > 0 ? styles.validationPending : validation.ok ? styles.validationOk : styles.validationMismatch;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -129,23 +142,18 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
         <Text style={styles.title}>{handName(t, handType)}</Text>
         <Text style={styles.unitLabel}>{t(`scorekeeper:unitLabel.${unitLabelKey(handType)}`)}</Text>
 
-        <View style={styles.steppers}>
-          {ALL_SEATS.map((seat) => (
-            <CountStepper
-              key={seat}
-              label={labels[seat]}
-              value={state.draftCounts[seat]}
-              max={max}
-              onChange={(value) => setCount(seat, value)}
-            />
-          ))}
+        <View style={styles.grid}>
+          <View style={styles.padRow}>
+            <CountStepper label={labels[0]} value={state.draftCounts[0]} max={max} onChange={(value) => setCount(0, value)} />
+            <CountStepper label={labels[1]} value={state.draftCounts[1]} max={max} onChange={(value) => setCount(1, value)} />
+          </View>
+          <View style={styles.padRow}>
+            <CountStepper label={labels[2]} value={state.draftCounts[2]} max={max} onChange={(value) => setCount(2, value)} />
+            <CountStepper label={labels[3]} value={state.draftCounts[3]} max={max} onChange={(value) => setCount(3, value)} />
+          </View>
         </View>
 
-        <Text style={[styles.validation, validation.ok ? styles.validationOk : styles.validationMismatch]}>
-          {validation.ok
-            ? t("scorekeeper:validation.ok")
-            : t("scorekeeper:validation.mismatch", { expected: validation.expectedTotal })}
-        </Text>
+        <Text style={[styles.validation, validationTone]}>{validationCopy}</Text>
 
         {handType === "positive" && (
           <Pressable style={styles.toggle} onPress={() => setDirection(state.draftDirection === "up" ? "down" : "up")}>
@@ -214,18 +222,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  steppers: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 20,
+  grid: {
     width: "100%",
+    gap: 10,
+  },
+  padRow: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
   },
   validation: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
+    fontSize: 14,
     marginTop: spacing.lg,
     textAlign: "center",
+  },
+  validationPending: {
+    color: colors.gold,
   },
   validationOk: {
     color: colors.validationOk,
