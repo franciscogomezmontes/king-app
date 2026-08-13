@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
-import type { HandHistoryEntry, PlayerIndex } from "rules-engine";
+import type { HandType, PlayerIndex } from "rules-engine";
 import { NEGATIVE_HAND_ORDER } from "rules-engine";
 import { useTranslation } from "../i18n";
 
@@ -14,8 +14,22 @@ const LAST_POSITIVE_INDEX = NEGATIVE_HAND_ORDER.length + 4 - 1;
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 
+/**
+ * The minimal shape `Scoreboard` actually reads — deliberately narrower than rules-engine's own
+ * `HandHistoryEntry` (which also carries a full `HandResult` and `dealer`, neither ever used here)
+ * so any caller that only has hand-type/scores/direction, not a full digitally-played hand history
+ * (e.g. Scorekeeper mode, which never records individual card plays), can reuse this component
+ * without fabricating meaningless data. `HandHistoryEntry` is a structural superset of this, so
+ * existing callers keep working unchanged.
+ */
+export interface ScoreboardEntry {
+  handType: HandType;
+  scores: Record<PlayerIndex, number>;
+  positiveSetup: { direction: "up" | "down" } | null;
+}
+
 export interface ScoreboardProps {
-  handHistory: HandHistoryEntry[];
+  handHistory: ScoreboardEntry[];
   seatLabels: Record<PlayerIndex, string>;
 }
 
@@ -23,7 +37,7 @@ function zeroTotals(): Record<PlayerIndex, number> {
   return { 0: 0, 1: 0, 2: 0, 3: 0 };
 }
 
-function ruleKey(entry: HandHistoryEntry): string {
+function ruleKey(entry: ScoreboardEntry): string {
   if (entry.handType !== "positive") return entry.handType;
   return entry.positiveSetup?.direction === "down" ? "positiveDown" : "positiveUp";
 }

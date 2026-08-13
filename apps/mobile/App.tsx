@@ -5,6 +5,7 @@ import { createDeck } from "rules-engine";
 import { I18nextProvider, SUPPORTED_LOCALES, useTranslation } from "ui-kit";
 import { GameScreen } from "./src/game/GameScreen";
 import { initI18n } from "./src/i18n";
+import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
 
 /**
  * Mode picker shell — proves the Web/Android/iOS/rules-engine/i18n wiring works end to end.
@@ -23,7 +24,7 @@ const MODES = [
 // this reads fine on a phone but stretches unreadably edge-to-edge on a desktop browser.
 const MAX_CONTENT_WIDTH = 480;
 
-type Screen = "menu" | "solo";
+type Screen = "menu" | "solo" | "scorekeeper";
 
 export default function App() {
   // One i18next instance per app session — see src/i18n/index.ts for device-locale detection.
@@ -33,21 +34,25 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <StatusBar style="light" />
-      {screen === "solo" ? (
-        <GameScreen onExit={() => setScreen("menu")} />
-      ) : (
-        <ModePicker onSelectSolo={() => setScreen("solo")} />
-      )}
+      {screen === "solo" && <GameScreen onExit={() => setScreen("menu")} />}
+      {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
+      {screen === "menu" && <ModePicker onSelect={setScreen} />}
     </I18nextProvider>
   );
 }
 
-function ModePicker({ onSelectSolo }: { onSelectSolo: () => void }) {
+function ModePicker({ onSelect }: { onSelect: (screen: Screen) => void }) {
   const { t, i18n } = useTranslation();
   // Sanity check that the rules-engine workspace package resolves correctly on this platform.
   const deckSize = useMemo(() => createDeck().length, []);
   const { width } = useWindowDimensions();
   const isCompact = width < 380; // smallest phones: tighten padding/type a notch further
+
+  // Which modes are wired up to a real screen yet — everything else stays an inert placeholder.
+  const screenForMode: Partial<Record<(typeof MODES)[number]["id"], Screen>> = {
+    scorekeeper: "scorekeeper",
+    solo: "solo",
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -67,13 +72,13 @@ function ModePicker({ onSelectSolo }: { onSelectSolo: () => void }) {
         <Text style={styles.subtitle}>{t("app:subtitle", { count: deckSize })}</Text>
         <View style={styles.modeList}>
           {MODES.map((mode) => {
-            const isSolo = mode.id === "solo";
+            const target = screenForMode[mode.id];
             return (
               <Pressable
                 key={mode.id}
-                style={[styles.modeButton, !isSolo && styles.modeButtonInert]}
-                onPress={isSolo ? onSelectSolo : undefined}
-                disabled={!isSolo}
+                style={[styles.modeButton, !target && styles.modeButtonInert]}
+                onPress={target ? () => onSelect(target) : undefined}
+                disabled={!target}
               >
                 <Text style={styles.modeLabel}>{t(`app:modes.${mode.id}`)}</Text>
                 <Text style={styles.modePhase}>

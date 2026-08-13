@@ -4,3 +4,4 @@
 
 export * from "./i18n";
 export * from "./game";
+export * from "./scorekeeper";

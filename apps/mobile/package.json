@@ -12,12 +12,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@babel/runtime": "^7.25.0",
+    "@expo/metro-runtime": "~4.0.1",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "ai-opponent": "workspace:*",
     "expo": "~52.0.0",
     "expo-localization": "~16.0.1",
     "expo-status-bar": "~2.0.0",
-    "@expo/metro-runtime": "~4.0.1",
-    "@babel/runtime": "^7.25.0",
-    "ai-opponent": "workspace:*",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-native": "0.76.9",
