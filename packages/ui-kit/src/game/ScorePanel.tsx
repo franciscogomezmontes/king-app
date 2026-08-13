@@ -42,7 +42,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.displaySemi,
     fontSize: 16,
-    fontWeight: "600",
     marginBottom: 4,
   },
   scores: {

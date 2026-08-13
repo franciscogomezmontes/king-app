@@ -32,7 +32,6 @@ const styles = StyleSheet.create({
   k: {
     fontFamily: fonts.display,
     color: colors.gold,
-    fontWeight: "700",
   },
   heart: {
     color: colors.heart,

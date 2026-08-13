@@ -46,7 +46,7 @@ export const radii = {
   pill: 999,
 } as const;
 
-export const type = {
+export const typography = {
   displayLg: {
     fontFamily: fonts.display,
     fontSize: 48,
@@ -94,7 +94,7 @@ export const theme = {
   fonts,
   spacing,
   radii,
-  type,
+  typography,
   layout,
 } as const;
 

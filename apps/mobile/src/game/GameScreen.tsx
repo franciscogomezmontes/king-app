@@ -15,7 +15,7 @@ import {
   layout,
   radii,
   spacing,
-  type,
+  typography,
   useTranslation,
 } from "ui-kit";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
@@ -336,13 +336,12 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   title: {
-    ...type.displayMd,
+    ...typography.displayMd,
     marginBottom: spacing.lg,
   },
   winnerText: {
     fontFamily: fonts.bodyBold,
     fontSize: 16,
-    fontWeight: "700",
     color: colors.gold,
     marginBottom: spacing.md,
     textAlign: "center",
@@ -355,7 +354,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodySemi,
     fontSize: 14,
-    fontWeight: "600",
     marginBottom: spacing.sm,
     textAlign: "center",
   },
@@ -381,7 +379,6 @@ const styles = StyleSheet.create({
   trumpButtonLabelSmall: {
     fontSize: 11,
     fontFamily: fonts.bodyBold,
-    fontWeight: "700",
     textAlign: "center",
     color: colors.ink,
   },
@@ -412,7 +409,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodySemi,
     fontSize: 13,
-    fontWeight: "600",
     minHeight: 18,
     marginTop: spacing.sm,
   },

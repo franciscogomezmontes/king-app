@@ -21,7 +21,7 @@ import {
   layout,
   radii,
   spacing,
-  type,
+  typography,
   useTranslation,
 } from "ui-kit";
 import { GameScreen } from "./src/game/GameScreen";
@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   title: {
-    ...type.displayLg,
+    ...typography.displayLg,
     textAlign: "center",
     marginTop: spacing.sm,
   },
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   pitch: {
-    ...type.body,
+    ...typography.body,
     textAlign: "center",
     marginTop: spacing.md,
     paddingHorizontal: spacing.sm,
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     color: colors.cream,
   },
   modeHint: {
-    ...type.caption,
+    ...typography.caption,
     marginTop: spacing.xs,
   },
   languageRow: {
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxl,
   },
   languageLabel: {
-    ...type.caption,
+    ...typography.caption,
     marginRight: spacing.xs,
   },
   languageButton: {
@@ -193,6 +193,5 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodySemi,
     fontSize: 13,
-    fontWeight: "600",
   },
 });

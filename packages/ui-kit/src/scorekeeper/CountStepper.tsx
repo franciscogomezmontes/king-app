@@ -113,7 +113,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodyBold,
     fontSize: 20,
-    fontWeight: "700",
     lineHeight: 22,
   },
   valueButton: {
@@ -125,7 +124,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodyBold,
     fontSize: 20,
-    fontWeight: "700",
   },
   input: {
     minWidth: 40,
@@ -133,7 +131,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodyBold,
     fontSize: 20,
-    fontWeight: "700",
     borderBottomWidth: 2,
     borderBottomColor: colors.gold,
     padding: 0,

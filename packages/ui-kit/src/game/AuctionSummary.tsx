@@ -58,7 +58,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodyBold,
     fontSize: 14,
-    fontWeight: "700",
     marginTop: 2,
   },
 });

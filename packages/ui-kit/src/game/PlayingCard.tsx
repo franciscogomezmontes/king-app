@@ -232,7 +232,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyBold,
     fontSize: 13,
     lineHeight: 14,
-    fontWeight: "700",
   },
   suit: {
     fontSize: 11,
@@ -284,7 +283,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 22,
     lineHeight: 24,
-    fontWeight: "700",
   },
   faceSuit: {
     fontSize: 16,

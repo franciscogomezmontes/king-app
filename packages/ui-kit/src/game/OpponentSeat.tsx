@@ -47,7 +47,6 @@ const styles = StyleSheet.create({
     color: colors.cream,
     fontFamily: fonts.bodySemi,
     fontSize: 13,
-    fontWeight: "600",
     marginBottom: 4,
   },
   labelActive: {

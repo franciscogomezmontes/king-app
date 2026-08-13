@@ -59,6 +59,5 @@ const styles = StyleSheet.create({
     color: colors.secondaryText,
     fontFamily: fonts.bodySemi,
     fontSize: 12,
-    fontWeight: "600",
   },
 });

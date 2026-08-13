@@ -172,7 +172,6 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontFamily: fonts.bodyBold,
-    fontWeight: "700",
     color: colors.secondaryText,
     fontSize: 12,
   },
@@ -181,7 +180,6 @@ const styles = StyleSheet.create({
   },
   subtotalText: {
     fontFamily: fonts.bodySemi,
-    fontWeight: "600",
     color: colors.secondaryText,
     fontSize: 12,
   },
@@ -194,7 +192,6 @@ const styles = StyleSheet.create({
   },
   totalText: {
     fontFamily: fonts.bodyBold,
-    fontWeight: "700",
     color: colors.gold,
   },
 });

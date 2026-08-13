@@ -26,6 +26,5 @@ const styles = StyleSheet.create({
     color: colors.felt,
     fontFamily: fonts.bodyBold,
     fontSize: 10,
-    fontWeight: "700",
   },
 });

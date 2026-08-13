@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, View } from "react-native";
 import { HandType, NEGATIVE_HAND_EXPECTED_COUNT, PlayerIndex, POSITIVE_HAND_EXPECTED_TRICKS, validateHandCounts } from "rules-engine";
-import { Button, CountStepper, Scoreboard, ScoreboardEntry, colors, fonts, layout, spacing, type, useTranslation } from "ui-kit";
+import { Button, CountStepper, Scoreboard, ScoreboardEntry, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
 import { ScorekeeperState, currentHandType, isGameComplete } from "./state";
 import { useScorekeeper } from "./useScorekeeper";
 
@@ -195,10 +195,9 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontFamily: fonts.bodySemi,
     fontSize: 13,
-    fontWeight: "600",
   },
   title: {
-    ...type.title,
+    ...typography.title,
     textAlign: "center",
     marginTop: 2,
   },
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   body: {
-    ...type.body,
+    ...typography.body,
     textAlign: "center",
     marginBottom: 20,
   },
@@ -225,7 +224,6 @@ const styles = StyleSheet.create({
   validation: {
     fontFamily: fonts.bodySemi,
     fontSize: 13,
-    fontWeight: "600",
     marginTop: spacing.lg,
     textAlign: "center",
   },
@@ -247,7 +245,6 @@ const styles = StyleSheet.create({
   winnerText: {
     fontFamily: fonts.bodyBold,
     fontSize: 16,
-    fontWeight: "700",
     color: colors.gold,
     marginBottom: spacing.md,
     textAlign: "center",
