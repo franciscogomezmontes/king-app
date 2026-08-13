@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, fonts, radii } from "../theme";
+import { colors, fonts, radii, spacing } from "../theme";
 
 export interface CountStepperProps {
-  /** Current count (0 to `max`). */
   value: number;
-  /** The most this count could ever be for this hand type (e.g. 13 tricks, 1 for King of Hearts). */
   max: number;
   onChange: (value: number) => void;
   label?: string;
@@ -17,12 +15,8 @@ function clamp(n: number, max: number): number {
 }
 
 /**
- * A count entry widget sized for values from 0-13 (tricks/hearts/etc. one player captured in a
- * hand) — the king-cross-platform-ui skill calls for "fast, error-resistant entry (steppers/large
- * tap targets)" for Scorekeeper mode specifically. Plain +/- steppers alone are fast for the small
- * ranges (0-1, 0-2) but nobody is going to tap "+1" thirteen times for a wide range (0-13, 0-8,
- * 0-4) — tapping the number itself swaps in a numeric keyboard for those, same
- * `keyboardType="number-pad"` pattern already used for the auction bid input in Solo vs Computer.
+ * One player's pad on the scorekeeper table: big count, big +/−, tap the number for a keypad.
+ * Sized as a flex cell in a 2×2 grid, not a tiny chip in a wrapping row.
  */
 export function CountStepper({ value, max, onChange, label }: CountStepperProps) {
   const [editing, setEditing] = useState(false);
@@ -34,7 +28,7 @@ export function CountStepper({ value, max, onChange, label }: CountStepperProps)
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.pad}>
       {label !== undefined && (
         <Text style={styles.label} numberOfLines={1}>
           {label}
@@ -45,6 +39,7 @@ export function CountStepper({ value, max, onChange, label }: CountStepperProps)
           style={[styles.button, value <= 0 && styles.buttonDisabled]}
           disabled={value <= 0}
           onPress={() => onChange(clamp(value - 1, max))}
+          hitSlop={4}
         >
           <Text style={styles.buttonLabel}>−</Text>
         </Pressable>
@@ -74,6 +69,7 @@ export function CountStepper({ value, max, onChange, label }: CountStepperProps)
           style={[styles.button, value >= max && styles.buttonDisabled]}
           disabled={value >= max}
           onPress={() => onChange(clamp(value + 1, max))}
+          hitSlop={4}
         >
           <Text style={styles.buttonLabel}>+</Text>
         </Pressable>
@@ -83,54 +79,64 @@ export function CountStepper({ value, max, onChange, label }: CountStepperProps)
 }
 
 const styles = StyleSheet.create({
-  container: {
+  pad: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
     alignItems: "center",
+    minHeight: 132,
+    justifyContent: "center",
   },
   label: {
-    color: colors.secondaryText,
-    fontFamily: fonts.body,
-    fontSize: 12,
-    marginBottom: 4,
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
+    fontSize: 14,
+    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: spacing.sm,
   },
   button: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     borderRadius: radii.md,
     backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
   },
   buttonDisabled: {
-    backgroundColor: colors.surface,
-    opacity: 0.5,
+    backgroundColor: colors.felt,
+    opacity: 0.55,
   },
   buttonLabel: {
     color: colors.cream,
     fontFamily: fonts.bodyBold,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 24,
+    lineHeight: 26,
   },
   valueButton: {
-    minWidth: 40,
+    minWidth: 52,
     alignItems: "center",
     justifyContent: "center",
   },
   value: {
     color: colors.cream,
-    fontFamily: fonts.bodyBold,
-    fontSize: 20,
+    fontFamily: fonts.display,
+    fontSize: 40,
+    lineHeight: 44,
   },
   input: {
-    minWidth: 40,
+    minWidth: 52,
     textAlign: "center",
     color: colors.cream,
-    fontFamily: fonts.bodyBold,
-    fontSize: 20,
+    fontFamily: fonts.display,
+    fontSize: 36,
     borderBottomWidth: 2,
     borderBottomColor: colors.gold,
     padding: 0,

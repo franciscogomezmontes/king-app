@@ -8,6 +8,20 @@ const RED_SUITS = new Set<Card["suit"]>(["H", "D"]);
 const RANK_LABELS: Partial<Record<Rank, string>> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
 const COURT_RANKS = new Set<Rank>([11, 12, 13]);
 
+export type CardFace = "fan" | "table";
+
+const DIM = {
+  fan: { width: 42, height: 64 },
+  table: { width: 64, height: 92 },
+} as const;
+
+/** Table-face size — used by trick slots and card backs. */
+export const CARD_WIDTH = DIM.table.width;
+export const CARD_HEIGHT = DIM.table.height;
+/** Fan size — used by the overlapping hand. */
+export const FAN_CARD_WIDTH = DIM.fan.width;
+export const FAN_CARD_HEIGHT = DIM.fan.height;
+
 function rankLabel(rank: Rank): string {
   return RANK_LABELS[rank] ?? String(rank);
 }
@@ -16,44 +30,56 @@ function suitColor(suit: Card["suit"]): string {
   return RED_SUITS.has(suit) ? colors.heart : colors.ink;
 }
 
-// 60×88 keeps a 13-card fan under a 360px phone: 60 + 12×22 = 324.
-export const CARD_WIDTH = 60;
-export const CARD_HEIGHT = 88;
-
 export interface PlayingCardProps {
   card: Card;
-  /** Omit to render a non-interactive card — e.g. a card sitting on the table. */
+  /** `fan` = readable corner index only (hand). `table` = full pips (trick). */
+  face?: CardFace;
   onPress?: () => void;
   disabled?: boolean;
-  /** Draws an attention border — used for the currently-legal cards in the human's hand. */
   highlighted?: boolean;
 }
 
 /**
- * A face-up playing card. Corner indices stay in the top-left sliver of a fan.
- * Number pips live in a padded well so they never collide with those indices.
- * No rotated pip glyphs — RN-web double-paints 180° Text and made 7s/9s/10s look broken.
+ * Face-up card. In a fanned hand the overlapping neighbor hides most of the card, so `face="fan"`
+ * draws only a large top-left index — the way a real fan is read. `face="table"` draws the full
+ * pip layout in a padded well that does not collide with the corners.
  */
-export function PlayingCard({ card, onPress, disabled = false, highlighted = false }: PlayingCardProps) {
+export function PlayingCard({
+  card,
+  face = "table",
+  onPress,
+  disabled = false,
+  highlighted = false,
+}: PlayingCardProps) {
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
   const isAceHearts = card.rank === 14 && card.suit === "H";
   const isKingHearts = card.rank === 13 && card.suit === "H";
+  const dim = DIM[face];
 
   return (
     <Pressable
       onPress={interactive ? onPress : undefined}
       disabled={!interactive}
-      style={[styles.card, highlighted && styles.cardHighlighted, isKingHearts && styles.cardKingHearts]}
+      style={[
+        styles.card,
+        { width: dim.width, height: dim.height },
+        highlighted && styles.cardHighlighted,
+        isKingHearts && face === "table" && styles.cardKingHearts,
+      ]}
     >
-      <CornerIndex rank={card.rank} suit={card.suit} color={color} />
-      <CornerIndex rank={card.rank} suit={card.suit} color={color} inverted />
-      {COURT_RANKS.has(card.rank) ? (
-        <CourtFace rank={card.rank} suit={card.suit} color={color} special={isKingHearts} />
-      ) : card.rank === 14 ? (
-        <AcePip suit={card.suit} color={color} special={isAceHearts} />
-      ) : (
-        <NumberPips rank={card.rank} suit={card.suit} color={color} />
+      <CornerIndex rank={card.rank} suit={card.suit} color={color} large={face === "fan"} />
+      {face === "table" && (
+        <>
+          <CornerIndex rank={card.rank} suit={card.suit} color={color} inverted />
+          {COURT_RANKS.has(card.rank) ? (
+            <CourtFace rank={card.rank} suit={card.suit} color={color} special={isKingHearts} />
+          ) : card.rank === 14 ? (
+            <AcePip suit={card.suit} color={color} special={isAceHearts} />
+          ) : (
+            <NumberPips rank={card.rank} suit={card.suit} color={color} />
+          )}
+        </>
       )}
       {disabled && <View style={styles.shadow} pointerEvents="none" />}
     </Pressable>
@@ -65,17 +91,21 @@ function CornerIndex({
   suit,
   color,
   inverted = false,
+  large = false,
 }: {
   rank: Rank;
   suit: Card["suit"];
   color: string;
   inverted?: boolean;
+  large?: boolean;
 }) {
   const ten = rank === 10;
   return (
-    <View style={[styles.corner, inverted ? styles.cornerInverted : styles.cornerTop]}>
-      <Text style={[styles.rank, ten && styles.rankTen, { color }]}>{rankLabel(rank)}</Text>
-      <Text style={[styles.suit, { color }]}>{SUIT_SYMBOLS[suit]}</Text>
+    <View style={[styles.corner, inverted ? styles.cornerInverted : styles.cornerTop, large && styles.cornerLarge]}>
+      <Text style={[large ? styles.rankFan : styles.rank, ten && !large && styles.rankTen, { color }]}>
+        {rankLabel(rank)}
+      </Text>
+      <Text style={[large ? styles.suitFan : styles.suit, { color }]}>{SUIT_SYMBOLS[suit]}</Text>
     </View>
   );
 }
@@ -204,7 +234,7 @@ function AcePip({ suit, color, special }: { suit: Card["suit"]; color: string; s
   return (
     <View style={styles.aceCenter} pointerEvents="none">
       {special && <View style={styles.aceRing} />}
-      <Text style={[styles.acePip, { color, fontSize: special ? 30 : 26 }]}>{SUIT_SYMBOLS[suit]}</Text>
+      <Text style={[styles.acePip, { color, fontSize: special ? 34 : 30 }]}>{SUIT_SYMBOLS[suit]}</Text>
     </View>
   );
 }
@@ -230,8 +260,6 @@ function CourtFace({
 
 const styles = StyleSheet.create({
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     borderRadius: radii.card,
     backgroundColor: colors.cream,
     borderWidth: 1,
@@ -251,6 +279,9 @@ const styles = StyleSheet.create({
     width: 18,
     zIndex: 2,
   },
+  cornerLarge: {
+    width: 24,
+  },
   cornerTop: {
     top: 3,
     left: 3,
@@ -262,45 +293,55 @@ const styles = StyleSheet.create({
   },
   rank: {
     fontFamily: fonts.bodyBold,
-    fontSize: 12,
-    lineHeight: 13,
+    fontSize: 13,
+    lineHeight: 14,
+    includeFontPadding: false,
+  },
+  rankFan: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 18,
+    lineHeight: 20,
     includeFontPadding: false,
   },
   rankTen: {
-    fontSize: 10,
-    lineHeight: 11,
+    fontSize: 11,
+    lineHeight: 12,
     letterSpacing: -0.6,
   },
   suit: {
-    fontSize: 10,
-    lineHeight: 11,
-    marginTop: 0,
+    fontSize: 11,
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
+  suitFan: {
+    fontSize: 15,
+    lineHeight: 16,
     includeFontPadding: false,
   },
   pipWell: {
     position: "absolute",
-    top: 16,
-    bottom: 16,
-    left: 14,
-    right: 14,
+    top: 18,
+    bottom: 18,
+    left: 16,
+    right: 16,
     justifyContent: "space-between",
   },
   pipRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    height: 12,
+    height: 13,
   },
   pipCenter: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    height: 12,
+    height: 13,
   },
   pip: {
-    width: 12,
-    fontSize: 11,
-    lineHeight: 12,
+    width: 14,
+    fontSize: 13,
+    lineHeight: 14,
     textAlign: "center",
     includeFontPadding: false,
   },
@@ -311,35 +352,35 @@ const styles = StyleSheet.create({
   },
   aceRing: {
     position: "absolute",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1.5,
     borderColor: colors.gold,
   },
   acePip: {
-    fontSize: 26,
-    lineHeight: 30,
+    fontSize: 30,
+    lineHeight: 34,
     includeFontPadding: false,
   },
   courtWell: {
     position: "absolute",
-    top: 18,
-    bottom: 18,
-    left: 16,
-    right: 16,
+    top: 20,
+    bottom: 20,
+    left: 18,
+    right: 18,
     alignItems: "center",
     justifyContent: "center",
   },
   courtRank: {
     fontFamily: fonts.display,
-    fontSize: 28,
-    lineHeight: 30,
+    fontSize: 32,
+    lineHeight: 34,
     includeFontPadding: false,
   },
   courtSuit: {
-    fontSize: 16,
-    lineHeight: 18,
+    fontSize: 18,
+    lineHeight: 20,
     marginTop: 2,
     includeFontPadding: false,
   },
