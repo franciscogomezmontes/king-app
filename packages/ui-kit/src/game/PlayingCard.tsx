@@ -1,3 +1,4 @@
+import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { Card, Rank } from "rules-engine";
 import { colors, fonts, radii } from "../theme";
@@ -83,115 +84,113 @@ function Pip({ suit, color }: { suit: Card["suit"]; color: string }) {
   return <Text style={[styles.pip, { color }]}>{SUIT_SYMBOLS[suit]}</Text>;
 }
 
-function PipRow({ children }: { children: React.ReactNode }) {
+function PipRow({ children }: { children: ReactNode }) {
   return <View style={styles.pipRow}>{children}</View>;
 }
 
-function PipCenter({ children }: { children: React.ReactNode }) {
+function PipCenter({ children }: { children: ReactNode }) {
   return <View style={styles.pipCenter}>{children}</View>;
 }
 
 function NumberPips({ rank, suit, color }: { rank: Rank; suit: Card["suit"]; color: string }) {
-  const pip = <Pip suit={suit} color={color} />;
-  const lr = (
-    <PipRow>
-      {pip}
-      {pip}
+  const p = () => <Pip suit={suit} color={color} />;
+  const lr = (key: string) => (
+    <PipRow key={key}>
+      {p()}
+      {p()}
     </PipRow>
   );
-  const mid = <PipCenter>{pip}</PipCenter>;
+  const mid = (key: string) => <PipCenter key={key}>{p()}</PipCenter>;
 
-  let rows: React.ReactNode;
+  let rows: ReactNode = null;
   switch (rank) {
     case 2:
       rows = (
         <>
-          {mid}
-          {mid}
+          {mid("t")}
+          {mid("b")}
         </>
       );
       break;
     case 3:
       rows = (
         <>
-          {mid}
-          {mid}
-          {mid}
+          {mid("t")}
+          {mid("m")}
+          {mid("b")}
         </>
       );
       break;
     case 4:
       rows = (
         <>
-          {lr}
-          {lr}
+          {lr("t")}
+          {lr("b")}
         </>
       );
       break;
     case 5:
       rows = (
         <>
-          {lr}
-          {mid}
-          {lr}
+          {lr("t")}
+          {mid("m")}
+          {lr("b")}
         </>
       );
       break;
     case 6:
       rows = (
         <>
-          {lr}
-          {lr}
-          {lr}
+          {lr("t")}
+          {lr("m")}
+          {lr("b")}
         </>
       );
       break;
     case 7:
       rows = (
         <>
-          {lr}
-          {mid}
-          {lr}
-          {lr}
+          {lr("t")}
+          {mid("u")}
+          {lr("m")}
+          {lr("b")}
         </>
       );
       break;
     case 8:
       rows = (
         <>
-          {lr}
-          {mid}
-          {lr}
-          {mid}
-          {lr}
+          {lr("t")}
+          {mid("u")}
+          {lr("m")}
+          {mid("d")}
+          {lr("b")}
         </>
       );
       break;
     case 9:
       rows = (
         <>
-          {lr}
-          {lr}
-          {mid}
-          {lr}
-          {lr}
+          {lr("1")}
+          {lr("2")}
+          {mid("m")}
+          {lr("3")}
+          {lr("4")}
         </>
       );
       break;
     case 10:
       rows = (
         <>
-          {lr}
-          {mid}
-          {lr}
-          {lr}
-          {mid}
-          {lr}
+          {lr("1")}
+          {mid("u")}
+          {lr("2")}
+          {lr("3")}
+          {mid("d")}
+          {lr("4")}
         </>
       );
       break;
-    default:
-      rows = null;
   }
 
   return (
