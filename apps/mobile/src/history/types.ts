@@ -1,7 +1,7 @@
 import type { PlayerIndex } from "rules-engine";
 import type { ScoreboardEntry } from "ui-kit";
 
-export type GameMode = "scorekeeper" | "solo";
+export type GameMode = "scorekeeper" | "solo" | "online";
 
 /**
  * One finished game, regardless of which mode produced it — Scorekeeper (physical cards) and Solo

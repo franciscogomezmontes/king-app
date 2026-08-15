@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { PlayerIndex } from "rules-engine";
 import { Button, Scoreboard, Surface, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
-import { loadCompletedGames } from "./persistence";
+import { clearAllCompletedGames, deleteCompletedGame, loadCompletedGames } from "./persistence";
 import type { CompletedGame } from "./types";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
@@ -23,13 +23,19 @@ function winnerLine(
 }
 
 /** A shared archive of finished games, regardless of which mode produced them — Scorekeeper
- * (physical cards) and Solo vs Computer both write to the same store (see
+ * (physical cards), Solo vs Computer, and Online all write to the same store (see
  * `apps/mobile/src/history/persistence.ts`), so a game night's paper scores and a solo practice
- * session against the bots show up in the same place. */
+ * session against the bots show up in the same place. Deleting (one game, or the whole list) uses
+ * an inline "are you sure?" confirm instead of a native Alert/Modal — consistent with how the rest
+ * of this app avoids Modal (see king-cross-platform-ui: it behaves inconsistently across Web/
+ * Android/iOS), and deletion here only removes the LOCAL record, never anything already shared
+ * with other devices (there's no shared/cloud history in this app yet). */
 export function HistoryScreen({ onExit }: HistoryScreenProps) {
   const { t } = useTranslation();
   const [games, setGames] = useState<CompletedGame[] | null>(null);
   const [selected, setSelected] = useState<CompletedGame | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmClearAll, setConfirmClearAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,6 +46,18 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
       cancelled = true;
     };
   }, []);
+
+  async function handleDelete(id: string) {
+    await deleteCompletedGame(id);
+    setGames((prev) => (prev ?? []).filter((g) => g.id !== id));
+    setConfirmDeleteId(null);
+  }
+
+  async function handleClearAll() {
+    await clearAllCompletedGames();
+    setGames([]);
+    setConfirmClearAll(false);
+  }
 
   if (selected !== null) {
     return (
@@ -70,18 +88,67 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
         {games !== null && games.length === 0 && <Text style={styles.empty}>{t("history:empty")}</Text>}
 
         <View style={styles.list}>
-          {(games ?? []).map((game) => (
-            <Pressable key={game.id} onPress={() => setSelected(game)}>
-              <Surface style={styles.gameCard}>
-                <View style={styles.gameCardHeader}>
-                  <Text style={styles.gameCardMode}>{t(`history:modeLabel.${game.mode}`)}</Text>
-                  <Text style={styles.gameCardDate}>{game.date}</Text>
+          {(games ?? []).map((game) =>
+            confirmDeleteId === game.id ? (
+              <Surface key={game.id} style={styles.gameCard}>
+                <Text style={styles.confirmText}>{t("history:confirmDelete")}</Text>
+                <View style={styles.confirmRow}>
+                  <Button
+                    label={t("history:deleteConfirm")}
+                    onPress={() => handleDelete(game.id)}
+                    variant="secondary"
+                    style={styles.confirmButton}
+                  />
+                  <Button
+                    label={t("history:deleteCancel")}
+                    onPress={() => setConfirmDeleteId(null)}
+                    variant="ghost"
+                    style={styles.confirmButton}
+                  />
                 </View>
-                <Text style={styles.gameCardWinner}>{winnerLine(t, game)}</Text>
               </Surface>
-            </Pressable>
-          ))}
+            ) : (
+              <Surface key={game.id} style={[styles.gameCard, styles.gameCardRow]}>
+                <Pressable style={styles.gameCardMain} onPress={() => setSelected(game)}>
+                  <View style={styles.gameCardHeader}>
+                    <Text style={styles.gameCardMode}>{t(`history:modeLabel.${game.mode}`)}</Text>
+                    <Text style={styles.gameCardDate}>{game.date}</Text>
+                  </View>
+                  <Text style={styles.gameCardWinner}>{winnerLine(t, game)}</Text>
+                </Pressable>
+                <Pressable onPress={() => setConfirmDeleteId(game.id)} style={styles.deleteButton} hitSlop={8}>
+                  <Text style={styles.deleteButtonLabel}>✕</Text>
+                </Pressable>
+              </Surface>
+            ),
+          )}
         </View>
+
+        {games !== null && games.length > 0 && (
+          <>
+            {confirmClearAll ? (
+              <Surface style={styles.gameCard}>
+                <Text style={styles.confirmText}>{t("history:confirmClearAll")}</Text>
+                <View style={styles.confirmRow}>
+                  <Button
+                    label={t("history:deleteConfirm")}
+                    onPress={handleClearAll}
+                    variant="secondary"
+                    style={styles.confirmButton}
+                  />
+                  <Button
+                    label={t("history:deleteCancel")}
+                    onPress={() => setConfirmClearAll(false)}
+                    variant="ghost"
+                    style={styles.confirmButton}
+                  />
+                </View>
+              </Surface>
+            ) : (
+              <Button label={t("history:clearAll")} onPress={() => setConfirmClearAll(true)} variant="ghost" />
+            )}
+          </>
+        )}
 
         <Button label={t("history:backToMenu")} onPress={onExit} variant="ghost" />
       </ScrollView>
@@ -132,6 +199,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.goldMuted,
   },
+  gameCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  gameCardMain: {
+    flex: 1,
+  },
+  deleteButton: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  deleteButtonLabel: {
+    color: colors.validationWarn,
+    fontFamily: fonts.bodyBold,
+    fontSize: 16,
+  },
   gameCardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -158,5 +242,21 @@ const styles = StyleSheet.create({
     color: colors.gold,
     marginBottom: spacing.md,
     textAlign: "center",
+  },
+  confirmText: {
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: spacing.sm,
+  },
+  confirmRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: spacing.sm,
+  },
+  confirmButton: {
+    minWidth: 0,
+    paddingHorizontal: spacing.md,
   },
 });

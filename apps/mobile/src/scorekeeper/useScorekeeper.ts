@@ -2,6 +2,7 @@ import { PlayerIndex } from "rules-engine";
 import { useEffect, useState } from "react";
 import type { ScoreboardEntry } from "ui-kit";
 import { saveCompletedGame, updateCompletedGame } from "../history/persistence";
+import { useSettings } from "../settings/useSettings";
 import { clearSession, loadSession, saveSession } from "./persistence";
 import {
   ScorekeeperState,
@@ -68,6 +69,7 @@ function newGameId(): string {
  * the in-progress slot and into the permanent game history instead of just discarding it.
  */
 export function useScorekeeper(): UseScorekeeperResult {
+  const { settings } = useSettings();
   const [state, setState] = useState<ScorekeeperState>(createScorekeeperState);
   const [loading, setLoading] = useState(true);
   const [resumeCandidate, setResumeCandidate] = useState<ScorekeeperState | null>(null);
@@ -121,9 +123,11 @@ export function useScorekeeper(): UseScorekeeperResult {
       const next = confirmHandState(s);
       if (isGameComplete(next)) {
         clearSession();
-        const id = newGameId();
-        setCompletedGameId(id);
-        saveCompletedGame(toCompletedGame(next, id));
+        if (settings.saveHistoryEnabled) {
+          const id = newGameId();
+          setCompletedGameId(id);
+          saveCompletedGame(toCompletedGame(next, id));
+        }
       } else {
         saveSession(next);
       }

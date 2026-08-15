@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { canRequestRedeal, DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
+import { canRequestRedeal, GameRules, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
 import {
   AuctionSummary,
   Button,
+  CardBackStyle,
   Hand,
   Panel,
   Scoreboard,
@@ -29,14 +30,29 @@ export interface GameScreenProps {
   onExit: () => void;
 }
 
-/** Top-level Solo vs. Computer screen: a tiny difficulty picker, then the live game. */
+/** Top-level Solo vs. Computer screen: waits for the player's saved Settings (game rules + card
+ * back style) to load, then a tiny difficulty picker, then the live game. Settings are read here
+ * rather than inside ActiveGame because the game store is created once on mount from whatever
+ * ruleSet is passed in — reading settings after that point could never retroactively apply them. */
 export function GameScreen({ onExit }: GameScreenProps) {
   const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
+  const { loading, settings } = useSettings();
 
+  if (loading) {
+    return <SafeAreaView style={styles.container} />;
+  }
   if (difficulty === null) {
     return <DifficultyPicker onChoose={setDifficulty} onExit={onExit} />;
   }
-  return <ActiveGame difficulty={difficulty} onExit={onExit} />;
+  return (
+    <ActiveGame
+      difficulty={difficulty}
+      gameRules={settings.gameRules}
+      cardBackStyle={settings.cardBackStyle}
+      saveHistoryEnabled={settings.saveHistoryEnabled}
+      onExit={onExit}
+    />
+  );
 }
 
 function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => void; onExit: () => void }) {
@@ -66,10 +82,22 @@ function turnMessage(
   return "";
 }
 
-function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: () => void }) {
+function ActiveGame({
+  difficulty,
+  gameRules,
+  cardBackStyle,
+  saveHistoryEnabled,
+  onExit,
+}: {
+  difficulty: Difficulty;
+  gameRules: GameRules;
+  cardBackStyle: CardBackStyle;
+  saveHistoryEnabled: boolean;
+  onExit: () => void;
+}) {
   const { t } = useTranslation();
   const [store] = useState<GameStoreHook>(() =>
-    createGameStore({ ruleSet: DEFAULT_GAME_RULES, humanSeat: HUMAN_SEAT, difficulty, firstDealer: 0 }),
+    createGameStore({ ruleSet: gameRules, humanSeat: HUMAN_SEAT, difficulty, firstDealer: 0 }),
   );
   const game = store((s) => s.game);
   const biddingIndex = store((s) => s.biddingIndex);
@@ -85,7 +113,6 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   // Local, not persisted — a per-session display preference, not game state. Defaults on: the
   // point is to make it discoverable, not to add a hunt-for-the-setting step.
   const [showLastTrick, setShowLastTrick] = useState(true);
-  const { settings } = useSettings();
 
   const decision = pendingDecision(game, biddingIndex);
   const seatLabels: Record<PlayerIndex, string> = {
@@ -96,7 +123,9 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   };
 
   if (game.phase === "game-complete") {
-    return <GameOverView game={game} seatLabels={seatLabels} onExit={onExit} />;
+    return (
+      <GameOverView game={game} seatLabels={seatLabels} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />
+    );
   }
 
   if (game.phase === "hand-complete") {
@@ -145,7 +174,7 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
           currentTurn={decision.kind === "play" ? decision.player : null}
           lastTrick={showLastTrick ? lastCompletedTrick : null}
           lastTrickLabel={t("game:lastTrick.label")}
-          cardBackStyle={settings.cardBackStyle}
+          cardBackStyle={cardBackStyle}
         />
         {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
           <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
@@ -219,7 +248,7 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
         {game.ruleSet.backwardsEnabled && (
           <Pressable style={styles.toggle} onPress={() => setBackwards((b) => !b)}>
             <Text style={styles.toggleLabel}>
-              {t("rules:ruleToggles.backwards.name")}: {backwards ? "✓" : "✗"}
+              {t("rules:ruleToggles.backwardsEnabled.name")}: {backwards ? "✓" : "✗"}
             </Text>
           </Pressable>
         )}
@@ -312,10 +341,12 @@ function HandCompleteView({
 function GameOverView({
   game,
   seatLabels,
+  saveHistoryEnabled,
   onExit,
 }: {
   game: GameState;
   seatLabels: Record<PlayerIndex, string>;
+  saveHistoryEnabled: boolean;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -328,7 +359,9 @@ function GameOverView({
 
   // Fires once when this view mounts (i.e. once per finished game) — folds the just-finished
   // game into the same shared history Scorekeeper saves to, so both modes show up in one place.
+  // Gated on the Settings "Save Game History" toggle — off means new games just don't get saved.
   useEffect(() => {
+    if (!saveHistoryEnabled) return;
     saveCompletedGame({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       mode: "solo",

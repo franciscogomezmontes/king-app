@@ -46,3 +46,16 @@ export async function updateCompletedGame(
   const next: StoredHistory = { version: HISTORY_VERSION, games: existing.map((g) => (g.id === id ? game : g)) };
   await storage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
+
+/** Removes one saved game (matched by id). Silently no-ops if the id isn't found. */
+export async function deleteCompletedGame(id: string, storage: KeyValueStorage = AsyncStorage): Promise<void> {
+  const existing = await loadCompletedGames(storage);
+  const next: StoredHistory = { version: HISTORY_VERSION, games: existing.filter((g) => g.id !== id) };
+  await storage.setItem(STORAGE_KEY, JSON.stringify(next));
+}
+
+/** Removes every saved game on this device. */
+export async function clearAllCompletedGames(storage: KeyValueStorage = AsyncStorage): Promise<void> {
+  const next: StoredHistory = { version: HISTORY_VERSION, games: [] };
+  await storage.setItem(STORAGE_KEY, JSON.stringify(next));
+}
