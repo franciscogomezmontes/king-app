@@ -27,10 +27,11 @@ import {
 import { GameScreen } from "./src/game/GameScreen";
 import { HistoryScreen } from "./src/history/HistoryScreen";
 import { initI18n } from "./src/i18n";
+import { OnlineScreen } from "./src/online/OnlineScreen";
 import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
 import { SettingsScreen } from "./src/settings/SettingsScreen";
 
-type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings";
+type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings" | "online";
 
 export default function App() {
   const [i18n] = useState(() => initI18n());
@@ -51,6 +52,7 @@ export default function App() {
     <I18nextProvider i18n={i18n}>
       <StatusBar style="light" />
       {screen === "solo" && <GameScreen onExit={() => setScreen("menu")} />}
+      {screen === "online" && <OnlineScreen onExit={() => setScreen("menu")} />}
       {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
       {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
       {screen === "settings" && <SettingsScreen onExit={() => setScreen("menu")} />}
@@ -86,6 +88,12 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
             <Surface style={styles.modeCard}>
               <Text style={styles.modeLabel}>{t("app:modes.solo")}</Text>
               <Text style={styles.modeHint}>{t("app:modes.soloHint")}</Text>
+            </Surface>
+          </Pressable>
+          <Pressable onPress={() => onSelect("online")}>
+            <Surface style={styles.modeCard}>
+              <Text style={styles.modeLabel}>{t("app:modes.online")}</Text>
+              <Text style={styles.modeHint}>{t("app:modes.onlineHint")}</Text>
             </Surface>
           </Pressable>
           <Pressable onPress={() => onSelect("history")}>

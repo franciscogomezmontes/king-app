@@ -18,6 +18,7 @@
     "@expo/metro-runtime": "~4.0.1",
     "@react-native-async-storage/async-storage": "1.23.1",
     "ai-opponent": "workspace:*",
+    "colyseus.js": "^0.16.22",
     "expo": "~52.0.0",
     "expo-font": "~13.0.4",
     "expo-localization": "~16.0.1",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@babel/plugin-transform-class-static-block": "^7.29.7",
     "@types/react": "~18.3.12",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"

@@ -22,3 +22,5 @@ jobs:
         run: pnpm --filter rules-engine test
       - name: AI opponent tests
         run: pnpm --filter ai-opponent test
+      - name: Server tests
+        run: pnpm --filter server test
