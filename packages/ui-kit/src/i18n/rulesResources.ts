@@ -133,7 +133,7 @@ export const RULES_LABELS: Record<Locale, RulesLabels> = {
           "Permite que el repartidor elija jugar una mano positiva \"hacia abajo\" (empieza en 325 y pierde puntos por baza) en vez de siempre \"hacia arriba\".",
       },
       backwardsEnabled: {
-        name: "Al Revés",
+        name: "Revés",
         description: "Quien nombra el triunfo puede invertir el orden de las cartas en la mano — el 2 es la más alta y el as la más baja.",
       },
       noFaceCardsRedealEnabled: {

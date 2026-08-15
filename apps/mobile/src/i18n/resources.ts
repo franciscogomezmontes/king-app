@@ -9,7 +9,7 @@ export const APP_RESOURCES = {
     app: {
       title: "KING",
       tagline: "Club table",
-      pitch: "Ten hands. Four players. Score a physical table, or sit against the house.",
+      pitch: "King, the way it's always been played",
       modes: {
         scorekeeper: "Scorekeeper",
         scorekeeperHint: "Keep score for a table with physical cards.",
@@ -27,7 +27,7 @@ export const APP_RESOURCES = {
     app: {
       title: "KING",
       tagline: "Mesa de club",
-      pitch: "Diez manos. Cuatro jugadores. Anota una mesa real, o siéntate contra la casa.",
+      pitch: "El King de toda la vida",
       modes: {
         scorekeeper: "Anotador",
         scorekeeperHint: "Anota una mesa con cartas físicas.",
