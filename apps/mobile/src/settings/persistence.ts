@@ -13,7 +13,14 @@ export async function loadSettings(storage: KeyValueStorage = AsyncStorage): Pro
     if (raw === null) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings>;
     if (parsed.version !== SETTINGS_VERSION) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    // `gameRules` is merged field-by-field (not replaced wholesale) so a persisted blob saved
+    // before some future rules-engine toggle existed still gets that toggle's default instead of
+    // `undefined` — the whole reason this settings menu is meant to grow over time.
+    return {
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+      gameRules: { ...DEFAULT_SETTINGS.gameRules, ...parsed.gameRules },
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }

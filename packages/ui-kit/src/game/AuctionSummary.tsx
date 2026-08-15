@@ -32,7 +32,7 @@ export function AuctionSummary({ positiveSetup, seatLabels }: AuctionSummaryProp
       <Text style={styles.trumpText}>
         {t("game:auctionSummary.trump")}: {trumpLabel}
         {positiveSetup.direction === "down" ? " · " + t("rules:playingDirection.down") : ""}
-        {positiveSetup.backwards ? " · " + t("rules:ruleToggles.backwards.name") : ""}
+        {positiveSetup.backwards ? " · " + t("rules:ruleToggles.backwardsEnabled.name") : ""}
       </Text>
     </View>
   );

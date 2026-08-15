@@ -41,4 +41,24 @@ describe("settings persistence", () => {
     await storage.setItem("king:settings:v1", JSON.stringify({ ...DEFAULT_SETTINGS, version: 999 }));
     expect(await loadSettings(storage)).toEqual(DEFAULT_SETTINGS);
   });
+
+  it("keeps a saved gameRules choice for fields it set", async () => {
+    const storage = fakeStorage();
+    const settings = { ...DEFAULT_SETTINGS, gameRules: { ...DEFAULT_SETTINGS.gameRules, backwardsEnabled: true } };
+    await saveSettings(settings, storage);
+    expect((await loadSettings(storage)).gameRules.backwardsEnabled).toBe(true);
+  });
+
+  it("fills in a missing gameRules field with its default instead of undefined (forward compatibility)", async () => {
+    const storage = fakeStorage();
+    // Simulates a blob saved before some future GameRules field existed: gameRules is present
+    // but incomplete, not absent entirely.
+    const { auctionMustSell: _dropped, ...incompleteGameRules } = DEFAULT_SETTINGS.gameRules;
+    await storage.setItem(
+      "king:settings:v1",
+      JSON.stringify({ ...DEFAULT_SETTINGS, gameRules: incompleteGameRules }),
+    );
+    const loaded = await loadSettings(storage);
+    expect(loaded.gameRules.auctionMustSell).toBe(DEFAULT_SETTINGS.gameRules.auctionMustSell);
+  });
 });
