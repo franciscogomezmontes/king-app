@@ -14,7 +14,35 @@ export type GameAction =
   | { type: "SUBMIT_BID"; player: PlayerIndex; tricks: number }
   | { type: "DEALER_DECIDE"; player: PlayerIndex; sell: boolean }
   | { type: "PLAY_CARD"; player: PlayerIndex; card: Card }
+  | { type: "REQUEST_REDEAL"; player: PlayerIndex; deck: Card[] }
   | { type: "ADVANCE_HAND" };
+
+/** A "figura" in the family's own term: jack, queen, king, or ace. */
+function hasNoFaceCards(hand: Card[]): boolean {
+  return hand.every((card) => card.rank < 11);
+}
+
+function hasPlayedThisHand(state: GameState, player: PlayerIndex): boolean {
+  const inCompletedTricks = state.completedTricks.some((trick) => trick.plays.some((p) => p.player === player));
+  const inCurrentTrick = state.currentTrick.some((p) => p.player === player);
+  return inCompletedTricks || inCurrentTrick;
+}
+
+/**
+ * Whether `player` could call `requestRedeal` right now — every precondition `requestRedeal`
+ * itself enforces, exposed as a plain check (not a throw) so a UI can decide whether to *offer*
+ * the option at all, and a bot can decide whether to take it, without needing to know
+ * `requestRedeal`'s own validation order.
+ */
+export function canRequestRedeal(state: GameState, player: PlayerIndex): boolean {
+  return (
+    state.ruleSet.noFaceCardsRedealEnabled &&
+    state.handType === "positive" &&
+    (state.phase === "trump-selection" || state.phase === "auction-bidding" || state.phase === "playing") &&
+    hasNoFaceCards(state.hands[player]) &&
+    !hasPlayedThisHand(state, player)
+  );
+}
 
 function sameCard(a: Card, b: Card): boolean {
   return a.suit === b.suit && a.rank === b.rank;
@@ -88,6 +116,51 @@ export function dealHand(
     phase: "playing",
     positiveSetup: null,
     currentTurn: firstLeaderRule(state.dealer),
+  };
+}
+
+/**
+ * A player whose dealt hand has zero face cards (J/Q/K/A — the family's own "sin figuras") may
+ * ask for this positive hand to be redealt, any time before they've played their own first card
+ * of it — trump may already be named, another player may already be mid-trick, none of that
+ * closes the window, only *this* player's own first play does. A valid request reshuffles and
+ * redeals the whole hand to all 4 players (same dealer, same hand index) and restarts it from
+ * trump-selection, discarding whatever trump/auction choice was already made against the
+ * now-replaced cards. Gated by `GameRules.noFaceCardsRedealEnabled` — see state.ts.
+ */
+export function requestRedeal(state: GameState, player: PlayerIndex, deck: Card[]): GameState {
+  if (!state.ruleSet.noFaceCardsRedealEnabled) {
+    throw new Error("requestRedeal: the no-face-cards redeal rule is not enabled for this game");
+  }
+  if (state.handType !== "positive") {
+    throw new Error(`requestRedeal: only positive hands allow a redeal, got hand type "${state.handType}"`);
+  }
+  if (state.phase !== "trump-selection" && state.phase !== "auction-bidding" && state.phase !== "playing") {
+    throw new Error(`requestRedeal: no hand is currently in play (phase "${state.phase}")`);
+  }
+  if (!hasNoFaceCards(state.hands[player])) {
+    throw new Error(`requestRedeal: player ${player}'s hand has at least one face card`);
+  }
+  if (hasPlayedThisHand(state, player)) {
+    throw new Error(`requestRedeal: player ${player} has already played a card this hand`);
+  }
+
+  const hands = deal(deck);
+  return {
+    ...state,
+    hands,
+    completedTricks: [],
+    currentTrick: [],
+    phase: "trump-selection",
+    positiveSetup: {
+      trumpNamer: state.dealer,
+      trump: null,
+      direction: "up",
+      backwards: false,
+      auctionOpened: false,
+      bids: [],
+      auction: null,
+    },
   };
 }
 
@@ -361,6 +434,8 @@ export function applyAction(state: GameState, action: GameAction, options: Apply
       return resolveDealerDecision(state, action.player, action.sell);
     case "PLAY_CARD":
       return playCard(state, action.player, action.card);
+    case "REQUEST_REDEAL":
+      return requestRedeal(state, action.player, action.deck);
     case "ADVANCE_HAND":
       return advanceHand(state, options.dealerRotation);
     default: {

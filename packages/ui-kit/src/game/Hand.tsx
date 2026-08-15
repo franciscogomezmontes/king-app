@@ -74,6 +74,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "flex-end",
+    // `lifted`'s translateY doesn't reserve layout space (transforms never do) — without this, a
+    // legal card lifting up visually rides into whatever sits above the hand (e.g. the turn
+    // indicator text), instead of just standing taller than its neighbors.
+    paddingTop: LIFT_OFFSET + 4,
   },
   waiting: {
     opacity: 0.88,

@@ -25,10 +25,12 @@ import {
   useTranslation,
 } from "ui-kit";
 import { GameScreen } from "./src/game/GameScreen";
+import { HistoryScreen } from "./src/history/HistoryScreen";
 import { initI18n } from "./src/i18n";
 import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
+import { SettingsScreen } from "./src/settings/SettingsScreen";
 
-type Screen = "menu" | "solo" | "scorekeeper";
+type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings";
 
 export default function App() {
   const [i18n] = useState(() => initI18n());
@@ -50,6 +52,8 @@ export default function App() {
       <StatusBar style="light" />
       {screen === "solo" && <GameScreen onExit={() => setScreen("menu")} />}
       {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
+      {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
+      {screen === "settings" && <SettingsScreen onExit={() => setScreen("menu")} />}
       {screen === "menu" && <Home onSelect={setScreen} />}
     </I18nextProvider>
   );
@@ -82,6 +86,18 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
             <Surface style={styles.modeCard}>
               <Text style={styles.modeLabel}>{t("app:modes.solo")}</Text>
               <Text style={styles.modeHint}>{t("app:modes.soloHint")}</Text>
+            </Surface>
+          </Pressable>
+          <Pressable onPress={() => onSelect("history")}>
+            <Surface style={styles.modeCard}>
+              <Text style={styles.modeLabel}>{t("history:title")}</Text>
+              <Text style={styles.modeHint}>{t("app:modes.historyHint")}</Text>
+            </Surface>
+          </Pressable>
+          <Pressable onPress={() => onSelect("settings")}>
+            <Surface style={styles.modeCard}>
+              <Text style={styles.modeLabel}>{t("settings:title")}</Text>
+              <Text style={styles.modeHint}>{t("app:modes.settingsHint")}</Text>
             </Surface>
           </Pressable>
         </View>

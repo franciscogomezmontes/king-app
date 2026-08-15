@@ -33,6 +33,14 @@ export const GAME_RESOURCES = {
         trump: "Trump",
       },
       backToMenu: "Back to Menu",
+      lastTrick: {
+        toggle: "Last trick",
+        label: "Last trick",
+      },
+      redeal: {
+        banner: "Your hand has no face cards (J, Q, K, A) — you can request a redeal.",
+        button: "Request Redeal",
+      },
       gameOver: "Game Over",
       difficulty: {
         label: "Difficulty",
@@ -92,6 +100,14 @@ export const GAME_RESOURCES = {
         trump: "Triunfo",
       },
       backToMenu: "Volver al Menú",
+      lastTrick: {
+        toggle: "Última baza",
+        label: "Última baza",
+      },
+      redeal: {
+        banner: "Tu mano no tiene figuras (J, Q, K, As) — puedes pedir cambio de juego.",
+        button: "Pedir Cambio de Juego",
+      },
       gameOver: "Fin del Juego",
       difficulty: {
         label: "Dificultad",

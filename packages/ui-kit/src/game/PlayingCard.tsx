@@ -1,4 +1,3 @@
-import { type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { Card, Rank } from "rules-engine";
 import { colors, fonts, radii } from "../theme";
@@ -12,7 +11,7 @@ export type CardFace = "fan" | "table";
 
 const DIM = {
   fan: { width: 42, height: 64 },
-  table: { width: 64, height: 92 },
+  table: { width: 72, height: 104 },
 } as const;
 
 /** Table-face size — used by trick slots and card backs. */
@@ -110,122 +109,51 @@ function CornerIndex({
   );
 }
 
-function Pip({ suit, color }: { suit: Card["suit"]; color: string }) {
-  return <Text style={[styles.pip, { color }]}>{SUIT_SYMBOLS[suit]}</Text>;
-}
+type PipRowSpec = "pair" | "single";
 
-function PipRow({ children }: { children: ReactNode }) {
-  return <View style={styles.pipRow}>{children}</View>;
-}
+// One entry per row, top to bottom — "pair" = two pips side by side, "single" = one pip centered.
+// Row *count* varies from 2 (rank 2) to 6 (rank 10), so a fixed per-row height would either waste
+// space on low counts or overflow the card on high ones (rank 10's 6 rows is what visibly broke
+// before this was made row-count-aware — see `pipMetrics`).
+const NUMBER_PIP_ROWS: Partial<Record<Rank, PipRowSpec[]>> = {
+  2: ["single", "single"],
+  3: ["single", "single", "single"],
+  4: ["pair", "pair"],
+  5: ["pair", "single", "pair"],
+  6: ["pair", "pair", "pair"],
+  7: ["pair", "single", "pair", "pair"],
+  8: ["pair", "single", "pair", "single", "pair"],
+  9: ["pair", "pair", "single", "pair", "pair"],
+  10: ["pair", "single", "pair", "pair", "single", "pair"],
+};
 
-function PipCenter({ children }: { children: ReactNode }) {
-  return <View style={styles.pipCenter}>{children}</View>;
+/** Shrinks row height/pip size just enough for the row count to fit inside `pipWell` (see its
+ * fixed top/bottom offsets below) — ranks with 4 or fewer rows get the original full size. */
+function pipMetrics(rowCount: number): { height: number; fontSize: number; lineHeight: number } {
+  if (rowCount >= 6) return { height: 10, fontSize: 9, lineHeight: 10 };
+  if (rowCount === 5) return { height: 12, fontSize: 11, lineHeight: 12 };
+  return { height: 13, fontSize: 13, lineHeight: 14 };
 }
 
 function NumberPips({ rank, suit, color }: { rank: Rank; suit: Card["suit"]; color: string }) {
-  const p = () => <Pip suit={suit} color={color} />;
-  const lr = (key: string) => (
-    <PipRow key={key}>
-      {p()}
-      {p()}
-    </PipRow>
-  );
-  const mid = (key: string) => <PipCenter key={key}>{p()}</PipCenter>;
-
-  let rows: ReactNode = null;
-  switch (rank) {
-    case 2:
-      rows = (
-        <>
-          {mid("t")}
-          {mid("b")}
-        </>
-      );
-      break;
-    case 3:
-      rows = (
-        <>
-          {mid("t")}
-          {mid("m")}
-          {mid("b")}
-        </>
-      );
-      break;
-    case 4:
-      rows = (
-        <>
-          {lr("t")}
-          {lr("b")}
-        </>
-      );
-      break;
-    case 5:
-      rows = (
-        <>
-          {lr("t")}
-          {mid("m")}
-          {lr("b")}
-        </>
-      );
-      break;
-    case 6:
-      rows = (
-        <>
-          {lr("t")}
-          {lr("m")}
-          {lr("b")}
-        </>
-      );
-      break;
-    case 7:
-      rows = (
-        <>
-          {lr("t")}
-          {mid("u")}
-          {lr("m")}
-          {lr("b")}
-        </>
-      );
-      break;
-    case 8:
-      rows = (
-        <>
-          {lr("t")}
-          {mid("u")}
-          {lr("m")}
-          {mid("d")}
-          {lr("b")}
-        </>
-      );
-      break;
-    case 9:
-      rows = (
-        <>
-          {lr("1")}
-          {lr("2")}
-          {mid("m")}
-          {lr("3")}
-          {lr("4")}
-        </>
-      );
-      break;
-    case 10:
-      rows = (
-        <>
-          {lr("1")}
-          {mid("u")}
-          {lr("2")}
-          {lr("3")}
-          {mid("d")}
-          {lr("4")}
-        </>
-      );
-      break;
-  }
+  const rowSpecs = NUMBER_PIP_ROWS[rank] ?? [];
+  const { height, fontSize, lineHeight } = pipMetrics(rowSpecs.length);
+  const pipStyle = { color, fontSize, lineHeight };
 
   return (
     <View style={styles.pipWell} pointerEvents="none">
-      {rows}
+      {rowSpecs.map((spec, index) =>
+        spec === "pair" ? (
+          <View key={index} style={[styles.pipRow, { height }]}>
+            <Text style={[styles.pip, pipStyle]}>{SUIT_SYMBOLS[suit]}</Text>
+            <Text style={[styles.pip, pipStyle]}>{SUIT_SYMBOLS[suit]}</Text>
+          </View>
+        ) : (
+          <View key={index} style={[styles.pipCenter, { height }]}>
+            <Text style={[styles.pip, pipStyle]}>{SUIT_SYMBOLS[suit]}</Text>
+          </View>
+        ),
+      )}
     </View>
   );
 }
@@ -234,7 +162,7 @@ function AcePip({ suit, color, special }: { suit: Card["suit"]; color: string; s
   return (
     <View style={styles.aceCenter} pointerEvents="none">
       {special && <View style={styles.aceRing} />}
-      <Text style={[styles.acePip, { color, fontSize: special ? 34 : 30 }]}>{SUIT_SYMBOLS[suit]}</Text>
+      <Text style={[styles.acePip, { color, fontSize: special ? 38 : 34 }]}>{SUIT_SYMBOLS[suit]}</Text>
     </View>
   );
 }
@@ -276,7 +204,7 @@ const styles = StyleSheet.create({
   corner: {
     position: "absolute",
     alignItems: "center",
-    width: 18,
+    width: 20,
     zIndex: 2,
   },
   cornerLarge: {
@@ -293,8 +221,8 @@ const styles = StyleSheet.create({
   },
   rank: {
     fontFamily: fonts.bodyBold,
-    fontSize: 13,
-    lineHeight: 14,
+    fontSize: 15,
+    lineHeight: 16,
     includeFontPadding: false,
   },
   rankFan: {
@@ -304,13 +232,13 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   rankTen: {
-    fontSize: 11,
-    lineHeight: 12,
+    fontSize: 13,
+    lineHeight: 14,
     letterSpacing: -0.6,
   },
   suit: {
-    fontSize: 11,
-    lineHeight: 12,
+    fontSize: 13,
+    lineHeight: 14,
     includeFontPadding: false,
   },
   suitFan: {
@@ -320,28 +248,24 @@ const styles = StyleSheet.create({
   },
   pipWell: {
     position: "absolute",
-    top: 18,
-    bottom: 18,
-    left: 16,
-    right: 16,
+    top: 20,
+    bottom: 20,
+    left: 18,
+    right: 18,
     justifyContent: "space-between",
   },
   pipRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    height: 13,
   },
   pipCenter: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    height: 13,
   },
   pip: {
-    width: 14,
-    fontSize: 13,
-    lineHeight: 14,
+    width: 16,
     textAlign: "center",
     includeFontPadding: false,
   },
@@ -352,36 +276,36 @@ const styles = StyleSheet.create({
   },
   aceRing: {
     position: "absolute",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     borderWidth: 1.5,
     borderColor: colors.gold,
   },
   acePip: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 34,
+    lineHeight: 38,
     includeFontPadding: false,
   },
   courtWell: {
     position: "absolute",
-    top: 20,
-    bottom: 20,
-    left: 18,
-    right: 18,
+    top: 22,
+    bottom: 22,
+    left: 20,
+    right: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   courtRank: {
     fontFamily: fonts.display,
-    fontSize: 32,
-    lineHeight: 34,
+    fontSize: 36,
+    lineHeight: 38,
     includeFontPadding: false,
   },
   courtSuit: {
-    fontSize: 18,
-    lineHeight: 20,
-    marginTop: 2,
+    fontSize: 20,
+    lineHeight: 22,
+    marginTop: 3,
     includeFontPadding: false,
   },
   shadow: {

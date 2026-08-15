@@ -86,7 +86,10 @@ export const typography = {
 } as const;
 
 export const layout = {
-  maxContentWidth: 480,
+  // A phone is essentially never wider than this, so raising it only changes anything on a wide
+  // Web viewport — where the board otherwise sat in an unnecessarily narrow, phone-width column
+  // with empty space on both sides.
+  maxContentWidth: 640,
 } as const;
 
 export const theme = {

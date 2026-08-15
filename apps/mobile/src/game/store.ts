@@ -2,6 +2,7 @@ import { create, StoreApi, UseBoundStore } from "zustand";
 import * as aiOpponent from "ai-opponent";
 import {
   applyAction,
+  canRequestRedeal,
   Card,
   createDeck,
   createGame,
@@ -115,7 +116,13 @@ function botAction(state: GameState, decision: Decision, bot: Bot): GameAction |
   }
 }
 
-const RESETS_BIDDING_INDEX = new Set<GameAction["type"]>(["DEAL_HAND", "OPEN_AUCTION", "DEALER_DECIDE", "ADVANCE_HAND"]);
+const RESETS_BIDDING_INDEX = new Set<GameAction["type"]>([
+  "DEAL_HAND",
+  "OPEN_AUCTION",
+  "DEALER_DECIDE",
+  "ADVANCE_HAND",
+  "REQUEST_REDEAL",
+]);
 
 /** Applies one decision's result (a real action, or a bid-decline "pass") and keeps biddingIndex
  * bookkeeping in sync — the single place this logic lives, shared by bot and human moves alike. */
@@ -144,6 +151,10 @@ function delay(ms: number): Promise<void> {
 // state transition, and the human never actually sees what was won. Skipped entirely (both this
 // and BOT_THINK_DELAY_MS) when botDelayMs is explicitly 0, e.g. in tests driving the game fast.
 const TRICK_REVEAL_MS = 1100;
+// The hand's very last trick gets noticeably longer on screen than a mid-hand one — it's not just
+// clearing the table for another trick, it's the moment right before the screen jumps straight to
+// the hand-complete scoreboard, so a mid-hand-length pause reads as "everything just vanished."
+const HAND_COMPLETE_REVEAL_MS = 2600;
 const DEFAULT_BOT_THINK_MS = 550;
 
 type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTrick) => void;
@@ -167,7 +178,10 @@ async function applyStepWithReveal(
   if (stepped.state.completedTricks.length > tricksBefore) {
     const justCompleted = stepped.state.completedTricks[stepped.state.completedTricks.length - 1];
     onStep(stepped.state, stepped.biddingIndex, justCompleted.plays);
-    if (botDelayMs > 0) await delay(TRICK_REVEAL_MS);
+    if (botDelayMs > 0) {
+      const revealMs = stepped.state.phase === "hand-complete" ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS;
+      await delay(revealMs);
+    }
   }
   onStep(stepped.state, stepped.biddingIndex, stepped.state.currentTrick);
   return stepped;
@@ -201,6 +215,20 @@ async function autoPlay(
       continue;
     }
     if (decision.player === humanSeat) return;
+
+    // A bot whose dealt hand has no face cards always takes the free redeal — there's no
+    // downside to it — before doing whatever its normal decision at this point would be. The
+    // human gets the equivalent choice as their own explicit button (see GameScreen), since
+    // unlike a bot they might have a reason to keep a weak-looking hand.
+    if (canRequestRedeal(current, decision.player)) {
+      if (botDelayMs > 0) await delay(botDelayMs);
+      const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
+      const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, onStep);
+      current = stepped.state;
+      bi = stepped.biddingIndex;
+      continue;
+    }
+
     if (botDelayMs > 0) await delay(botDelayMs);
     const stepped = await applyStepWithReveal(current, bi, botAction(current, decision, bot), botDelayMs, onStep);
     current = stepped.state;
@@ -235,6 +263,10 @@ export interface GameStore {
   submitBid: (tricks: number) => void;
   passBid: () => void;
   dealerDecide: (sell: boolean) => void;
+  /** Redeals the current positive hand — only ever a legal move when `canRequestRedeal(game,
+   * humanSeat)` says so (see rules-engine): the human's dealt hand has zero face cards, and they
+   * haven't played a card of it yet. The UI is responsible for only offering the button then. */
+  requestRedeal: () => void;
   /** Acknowledges the just-completed hand's results and moves on to the next deal (or to
    * game-complete, if that was the 10th hand). */
   continueToNextHand: () => void;
@@ -291,6 +323,8 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
       submitBid: (tricks) => dispatch({ type: "SUBMIT_BID", player: get().humanSeat, tricks }),
       passBid: () => dispatch("pass"),
       dealerDecide: (sell) => dispatch({ type: "DEALER_DECIDE", player: get().humanSeat, sell }),
+      requestRedeal: () =>
+        dispatch({ type: "REQUEST_REDEAL", player: get().humanSeat, deck: shuffle(createDeck(), random) }),
       continueToNextHand: () => dispatch({ type: "ADVANCE_HAND" }),
       waitForIdle: () => pending,
     };

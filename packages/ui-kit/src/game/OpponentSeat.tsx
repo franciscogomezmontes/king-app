@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
 import { colors, fonts, radii, spacing } from "../theme";
-import { CardBack } from "./CardBack";
+import { CardBack, CardBackStyle } from "./CardBack";
 import { DealerBadge } from "./DealerBadge";
 import { TrickPile } from "./TrickPile";
 
@@ -12,17 +12,20 @@ export interface OpponentSeatProps {
   tricksWon: number;
   /** Whether this seat is dealing the current hand — always shown, independent of whose turn it is. */
   isDealer: boolean;
+  /** Which face-down pattern to render for this opponent's hidden hand — the player's Settings
+   * choice. Defaults to CardBack's own default ("lattice") when omitted. */
+  cardBackStyle?: CardBackStyle;
 }
 
 /** An opponent's seat: name/position, remaining card count, and their face-down pile of tricks
  * won so far — highlighted on their turn, badged when they're the dealer. Their card for the
  * trick in progress shows in the table's center pile instead (see Table), not pinned to their seat. */
-export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer }: OpponentSeatProps) {
+export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer, cardBackStyle }: OpponentSeatProps) {
   return (
     <View style={[styles.container, isCurrentTurn && styles.active]}>
       <Text style={[styles.label, isCurrentTurn && styles.labelActive]}>{label}</Text>
       <View style={styles.stack}>
-        <CardBack />
+        <CardBack variant={cardBackStyle} />
         <Text style={styles.count}>×{cardCount}</Text>
       </View>
       {isDealer && <DealerBadge />}

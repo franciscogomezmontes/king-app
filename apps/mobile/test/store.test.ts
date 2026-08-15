@@ -86,8 +86,20 @@ async function playFullGameViaStore(
 
 describe("game store — full games via the public API", () => {
   const ruleSetCombos: GameRules[] = [
-    { mandatoryKilling: false, auctionMustSell: false, playingDownEnabled: false, backwardsEnabled: false },
-    { mandatoryKilling: true, auctionMustSell: true, playingDownEnabled: true, backwardsEnabled: true },
+    {
+      mandatoryKilling: false,
+      auctionMustSell: false,
+      playingDownEnabled: false,
+      backwardsEnabled: false,
+      noFaceCardsRedealEnabled: false,
+    },
+    {
+      mandatoryKilling: true,
+      auctionMustSell: true,
+      playingDownEnabled: true,
+      backwardsEnabled: true,
+      noFaceCardsRedealEnabled: true,
+    },
   ];
 
   for (const difficulty of ["easy", "normal"] as const) {

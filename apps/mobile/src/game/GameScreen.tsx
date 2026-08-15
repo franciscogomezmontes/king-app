@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from "react-native";
-import { DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
+import { useEffect, useState } from "react";
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { canRequestRedeal, DEFAULT_GAME_RULES, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
+import { saveCompletedGame } from "../history/persistence";
+import { useSettings } from "../settings/useSettings";
 import {
   AuctionSummary,
   Button,
@@ -79,6 +81,11 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   const passBid = store((s) => s.passBid);
   const dealerDecide = store((s) => s.dealerDecide);
   const continueToNextHand = store((s) => s.continueToNextHand);
+  const requestRedeal = store((s) => s.requestRedeal);
+  // Local, not persisted — a per-session display preference, not game state. Defaults on: the
+  // point is to make it discoverable, not to add a hunt-for-the-setting step.
+  const [showLastTrick, setShowLastTrick] = useState(true);
+  const { settings } = useSettings();
 
   const decision = pendingDecision(game, biddingIndex);
   const seatLabels: Record<PlayerIndex, string> = {
@@ -108,12 +115,19 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
   };
   const tricksWon: Record<PlayerIndex, number> = { 0: 0, 1: 0, 2: 0, 3: 0 };
   for (const trick of game.completedTricks) tricksWon[trick.winner] += 1;
+  const lastCompletedTrick = game.completedTricks[game.completedTricks.length - 1]?.plays ?? null;
+  const eligibleForRedeal = canRequestRedeal(game, HUMAN_SEAT);
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
           <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
+          <Pressable onPress={() => setShowLastTrick((v) => !v)}>
+            <Text style={styles.headerToggle}>
+              {t("game:lastTrick.toggle")}: {showLastTrick ? "✓" : "✗"}
+            </Text>
+          </Pressable>
         </View>
         <ScorePanel
           handType={game.handType}
@@ -129,9 +143,18 @@ function ActiveGame({ difficulty, onExit }: { difficulty: Difficulty; onExit: ()
           currentTrick={displayTrick}
           seatLabels={seatLabels}
           currentTurn={decision.kind === "play" ? decision.player : null}
+          lastTrick={showLastTrick ? lastCompletedTrick : null}
+          lastTrickLabel={t("game:lastTrick.label")}
+          cardBackStyle={settings.cardBackStyle}
         />
         {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
           <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
+        )}
+        {eligibleForRedeal && (
+          <Panel style={styles.panel}>
+            <Text style={styles.prompt}>{t("game:redeal.banner")}</Text>
+            <Button label={t("game:redeal.button")} onPress={requestRedeal} variant="secondary" style={styles.inlineButton} />
+          </Panel>
         )}
         <DecisionPanel
           game={game}
@@ -273,12 +296,15 @@ function HandCompleteView({
   const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
+      >
         <Text style={styles.title}>{t("game:handComplete.title", { number: game.handIndex + 1 })}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Button label={t("game:handComplete.continue")} onPress={onContinue} />
         <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -300,14 +326,36 @@ function GameOverView({
       ? t("game:scoreboard.winner", { name: seatLabels[winners[0]] })
       : t("game:scoreboard.tie", { names: winners.map((seat) => seatLabels[seat]).join(", ") });
 
+  // Fires once when this view mounts (i.e. once per finished game) — folds the just-finished
+  // game into the same shared history Scorekeeper saves to, so both modes show up in one place.
+  useEffect(() => {
+    saveCompletedGame({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      mode: "solo",
+      date: new Date().toISOString().slice(0, 10),
+      savedAt: new Date().toISOString(),
+      playerNames: seatLabels,
+      finalScores: game.cumulativeScores,
+      handHistory: game.handHistory.map((entry) => ({
+        handType: entry.handType,
+        scores: entry.scores,
+        positiveSetup: entry.positiveSetup !== null ? { direction: entry.positiveSetup.direction } : null,
+      })),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
+      >
         <Text style={styles.title}>{t("game:gameOver")}</Text>
         <Text style={styles.winnerText}>{winnerLine}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Button label={t("game:backToMenu")} onPress={onExit} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -325,15 +373,25 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     alignItems: "center",
   },
+  scrollContainer: {
+    width: "100%",
+  },
   header: {
     width: "100%",
     marginBottom: spacing.sm,
-    alignItems: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   headerLink: {
     minWidth: 0,
     paddingHorizontal: 0,
     alignSelf: "flex-start",
+  },
+  headerToggle: {
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
+    fontSize: 13,
   },
   title: {
     ...typography.displayMd,

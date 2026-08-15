@@ -18,19 +18,29 @@ import {
  * `backwardsEnabled` is false, no positive hand may go backwards. See `declareTrump` in
  * actions.ts for where that gate is enforced, and its doc-comment for how a per-hand *effective*
  * `RuleSet` gets composed from `GameRules` + the hand's live choice.
+ *
+ * `noFaceCardsRedealEnabled` gates a different kind of thing — not a scoring/legality choice, but
+ * whether `requestRedeal` (actions.ts) is a legal action at all: a positive hand whose dealt hand
+ * has zero face cards (J/Q/K/A) may ask for that hand to be redealt, any time before they've
+ * played their own first card of it.
  */
 export interface GameRules {
   mandatoryKilling: boolean;
   auctionMustSell: boolean;
   playingDownEnabled: boolean;
   backwardsEnabled: boolean;
+  noFaceCardsRedealEnabled: boolean;
 }
 
+// Mandatory Killing and the no-face-cards redeal default ON — per the family, these are standard
+// parts of how they actually play, not opt-in variants (unlike Auction Must Sell/Playing Down/
+// Backwards, which genuinely are optional house variants and stay off by default).
 export const DEFAULT_GAME_RULES: GameRules = {
-  mandatoryKilling: false,
+  mandatoryKilling: true,
   auctionMustSell: false,
   playingDownEnabled: false,
   backwardsEnabled: false,
+  noFaceCardsRedealEnabled: true,
 };
 
 /** The ten hands of a game, in fixed play order: the six negative hands, then four positive hands. */
