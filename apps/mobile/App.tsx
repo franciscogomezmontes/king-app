@@ -26,12 +26,13 @@ import {
 } from "ui-kit";
 import { GameScreen } from "./src/game/GameScreen";
 import { HistoryScreen } from "./src/history/HistoryScreen";
+import { HowToPlayScreen } from "./src/howToPlay/HowToPlayScreen";
 import { initI18n } from "./src/i18n";
 import { OnlineScreen } from "./src/online/OnlineScreen";
 import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
 import { SettingsScreen } from "./src/settings/SettingsScreen";
 
-type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings" | "online";
+type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings" | "online" | "howToPlay";
 
 export default function App() {
   const [i18n] = useState(() => initI18n());
@@ -55,7 +56,10 @@ export default function App() {
       {screen === "online" && <OnlineScreen onExit={() => setScreen("menu")} />}
       {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
       {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
-      {screen === "settings" && <SettingsScreen onExit={() => setScreen("menu")} />}
+      {screen === "settings" && (
+        <SettingsScreen onExit={() => setScreen("menu")} onHowToPlay={() => setScreen("howToPlay")} />
+      )}
+      {screen === "howToPlay" && <HowToPlayScreen onExit={() => setScreen("settings")} />}
       {screen === "menu" && <Home onSelect={setScreen} />}
     </I18nextProvider>
   );

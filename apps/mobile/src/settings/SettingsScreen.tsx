@@ -18,14 +18,17 @@ import { useSettings } from "./useSettings";
 
 export interface SettingsScreenProps {
   onExit: () => void;
+  onHowToPlay: () => void;
 }
 
 /** The player's cross-mode preferences: which face-down pattern opponents' cards show in Solo vs
  * Computer, and the game-setup rules menu (Mandatory Killing, Auction Must Sell, Playing Down,
  * Backwards, the no-face-cards redeal, and whatever gets added to `GameRules` next — the toggle
  * list is driven by `GAME_RULE_TOGGLE_KEYS`, so a new rules-engine toggle shows up here with no UI
- * change needed, just a translated label). Configured once here rather than re-asked per game. */
-export function SettingsScreen({ onExit }: SettingsScreenProps) {
+ * change needed, just a translated label). Configured once here rather than re-asked per game.
+ * Also the entry point to the "How to Play" rules explainer, for players who don't know the game
+ * yet. */
+export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
   const { t } = useTranslation();
   const { settings, setCardBackStyle, setGameRule, setSaveHistoryEnabled } = useSettings();
 
@@ -36,6 +39,13 @@ export function SettingsScreen({ onExit }: SettingsScreenProps) {
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
         <Text style={styles.title}>{t("settings:title")}</Text>
+
+        <Button
+          label={t("settings:howToPlay.button")}
+          onPress={onHowToPlay}
+          variant="secondary"
+          style={styles.howToPlayButton}
+        />
 
         <Text style={styles.sectionTitle}>{t("settings:cardBack.title")}</Text>
         <Text style={styles.sectionHint}>{t("settings:cardBack.hint")}</Text>
@@ -117,6 +127,9 @@ const styles = StyleSheet.create({
   title: {
     ...typography.displayMd,
     marginBottom: spacing.lg,
+  },
+  howToPlayButton: {
+    marginBottom: spacing.xl,
   },
   sectionTitle: {
     fontFamily: fonts.displaySemi,

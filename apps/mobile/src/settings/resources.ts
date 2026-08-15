@@ -7,6 +7,9 @@ export const SETTINGS_RESOURCES = {
     settings: {
       title: "Settings",
       backToMenu: "Back to Menu",
+      howToPlay: {
+        button: "How to Play",
+      },
       cardBack: {
         title: "Card Back",
         hint: "Choose how opponents' hidden cards look in Solo vs Computer.",
@@ -30,6 +33,9 @@ export const SETTINGS_RESOURCES = {
     settings: {
       title: "Ajustes",
       backToMenu: "Volver al Menú",
+      howToPlay: {
+        button: "Cómo se Juega",
+      },
       cardBack: {
         title: "Revés de las Cartas",
         hint: "Elige cómo se ven las cartas ocultas de los rivales en Solo vs Computadora.",
