@@ -13,11 +13,13 @@ Guidance for building the computer players for Solo vs. Computer mode (Notion pr
 The bot must always produce a *legal* move via `packages/rules-engine`'s legality functions —
 never hand-roll legality inside the bot. On top of legality, apply simple per-hand-type heuristics:
 
-- **Negative hands (avoid capturing):** when void in the led suit, discard the highest/most
-  dangerous card of a penalty category first (e.g. dump high hearts early in No Hearts, dump K♥
-  as early as legally possible in No King of Hearts once forced to touch hearts). When forced to
-  follow suit and must contribute to a trick, prefer the lowest card that still avoids winning the
-  trick if any safe option exists.
+- **Negative hands (avoid capturing):** whenever a card is available that's already guaranteed not
+  to win the current trick — whether that's a void discard or ducking under while following suit,
+  the two are treated identically (see `mostDangerous` below) — discard the highest/most dangerous
+  card of the hand's penalty category first (e.g. dump high hearts early in No Hearts, dump K♥ as
+  early as legally possible in No King of Hearts once forced to touch hearts), rather than
+  hoarding it and hoping for another safe window later. When forced to actually win a trick (every
+  legal card would), play the lowest of them — least-bad option, not a discard decision anymore.
 - **No Last Two Tricks specifically:** track trick count remaining; bias toward not winning tricks
   12 and 13 in particular, which requires the bot to reason about trick-count, not just card rank.
 - **Positive hands (win tricks):** prefer winning with the lowest card that still wins, preserve
@@ -27,6 +29,77 @@ never hand-roll legality inside the bot. On top of legality, apply simple per-ha
   cards + likely trump length) rather than bidding randomly; keep it simple and tunable rather than
   "optimal" for v1.
 - This tier should be good enough to ship as a real Phase 4 release — don't block launch on Tier 2.
+
+**`estimateTricks` (`handStrength.ts`) — calibrated against real-table norms, not a flat point
+average.** Shared by `shouldOpenAuction`, `chooseBid`, and `chooseDealerDecision` — all three call
+this one function, so they're automatically consistent with each other (a dealer's "should I sell"
+call and a bidder's "what should I bid" call always agree on what a hand is worth). The original
+version (`points / 3`, Ace=4/King=3/Queen=2/Jack=1) routinely produced bids of 5 — direct
+playtesting (not just bot-vs-bot simulation) caught this as unrealistic: at this family's table,
+offering 3 tricks is already a strong bid, 4 is rare, 5+ is essentially never seen outside a truly
+exceptional hand. Replaced with a suit-by-suit "quick tricks" model (the standard trick-taking
+convention: only Ace/King-headed holdings count — `AK`=2, `AQ`=1.25, bare `A`=1, `KQ`=0.75, backed
+`K`=0.4, everything headed by Q/J or lower=0) plus a length bonus for a genuinely long suit that's
+also headed by real strength (`LENGTH_BONUS_MIN_LENGTH`=6+ cards, `LENGTH_BONUS_PER_EXTRA_CARD`=0.4
+each beyond that — an unheaded long suit of low cards won't establish itself before the hand's
+over, so it earns nothing). All weights are tunable, but re-run `handStrength.test.ts` after
+changing them — it deals hundreds of real 13-card hands and asserts the resulting bid distribution
+against those same norms (4+ under 15% of hands, 5+ under 3%) directly, rather than trusting the
+formula by inspection.
+
+**Trump is a reserve, not just another suit — `choosePositiveLead`'s trump-length branch
+(`heuristic.ts`).** Direct playtesting caught the bot proactively leading a decent-but-unproven
+trump holding (e.g. the King of trump with the Ace still unseen) far too readily. The branch that
+leads trump to draw opponents out without a proven master now only fires at
+`TRUMP_LEAD_CONTROL_LENGTH` (5+) — well above the ~3.25-per-suit average across 4 hands, meaning
+the other three players combined hold at most 8 — not the old 3+, which was barely above average
+and not real control. Below that bar, trump is held in reserve rather than spent recklessly. This
+also closes a related leak in the generic "safest available lead" fallback below it: that fallback
+picks purely by suit length/void count and doesn't know about trump at all, so on a merely-decent
+trump holding it would happen to re-select trump anyway whenever trump was incidentally the
+hand's longest suit — defeating the whole point of the length-control branch above it. The fallback
+now excludes trump from that comparison entirely, only leading it if trump is the only suit left in
+hand (a genuinely forced position). See `chooseCard.test.ts`'s regression tests for the exact
+King-length-3 scenario this fixes and the length-5+ case that should still lead trump.
+
+**Negative-hand discards: `mostDangerous` applies whenever a nonWinner is available, not just on
+void discards.** A card that currently doesn't win the trick (`nonWinners`) is a permanently safe
+fact — its rank can't retroactively change, and being already-beaten by an earlier play never gets
+undone — so it's a genuinely zero-cost moment to shed the hand type's specific danger category
+(e.g. the Queen under an Ace in No Queens), not just when void in the led suit. Both the
+void-discard case and the following-suit "duck under" case now route through the same
+`mostDangerous(nonWinners, handType, backwards)` call — a single unified rule instead of two
+different ones for what's actually the same situation. `mostDangerous` itself gained a tie-break:
+when nothing in the candidate set matches the hand type's danger category (`dangerScore` ties at 0
+for everyone — e.g. following a spade lead in No Queens with no queens among the legal spades), it
+now falls back to the lowest-ranked card rather than an arbitrary array-order pick, so it never does
+worse than the old plain `lowestCard` behavior when there's no real signal to act on.
+
+**Negative-hand leads never spend a proven master for nothing — `nonDominatedLeads`
+(`cardTracker.ts`).** A card that's already the guaranteed highest remaining of its suit
+(`isMasterCard`) is mathematically certain to win its own trick when led into an empty trick, since
+a negative hand never has trump to create any chance of it being beaten. Leading one is never
+correct except when every legal lead is equally dominated (a genuinely forced position). This was
+caught live at Experto: with zero clubs played and the bot holding the entire top of the club suit
+itself (A/K/Q), ISMCTS still led the Queen of Clubs — a provably dominated move that a real player
+would reject instantly, but that a modest search budget (250-900ms) spread across a wide branching
+factor (11-13 legal leads this early) can end up under-sampling and never correcting, especially
+early in a hand when there's the least information and the most options. `nonDominatedLeads(legal,
+hand, tracker)` filters these out structurally, before the search (or the Tier 1 heuristic) ever
+has to rediscover the fact by sampling or luck. Applied in two places, so both tiers share the same
+domain fact: `chooseCardHeuristic`'s own negative-hand lead branch (almost always a no-op there,
+since "lead lowest" rarely happens to be a master anyway, but now explicit and shared rather than
+incidental), and `ismctsChooseCard`'s root candidate set specifically (`runIteration`'s
+`rootCandidates` parameter — restricted only at `node === root`, i.e. the actual decision being
+searched; every deeper node in the tree, and every rollout decision via `chooseCardHeuristic`, is
+unaffected). See `chooseCard.test.ts`'s regression test, which checks both tiers against the same
+scenario.
+
+Regression-test cadence for all four fixes above: `hardVsNormal.test.ts` and
+`difficultyComparison.test.ts` re-verify the "better tier wins" invariant after each one — the
+specific margins shift as the heuristic/search get stronger, but the direction (Normal beats the
+old pre-tracking heuristic; Hard beats Normal) must keep holding. Re-run both after touching any of
+`handStrength.ts`, `heuristic.ts`, `cardTracker.ts`, or `ismcts.ts`.
 
 ## Tier 2 — Information Set Monte Carlo Tree Search (ISMCTS)
 

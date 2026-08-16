@@ -12,7 +12,7 @@ import {
   Suit,
   TrumpSuit,
 } from "rules-engine";
-import { CardTracker, isMasterCard, opponentVoidCount, trackCards } from "./cardTracker";
+import { CardTracker, isMasterCard, nonDominatedLeads, opponentVoidCount, trackCards } from "./cardTracker";
 
 /** Would playing `card` right now win the trick? Exact when `player` is last to act; a sound
  * heuristic signal otherwise. Reuses `resolveTrick` itself rather than reimplementing rank/trump
@@ -74,9 +74,35 @@ function dangerScore(card: Card, handType: NegativeHandType): number {
   }
 }
 
-function mostDangerous(cards: Card[], handType: NegativeHandType): Card {
-  return cards.reduce((best, c) => (dangerScore(c, handType) > dangerScore(best, handType) ? c : best));
+/**
+ * The most dangerous card to be holding, among `cards`, for this negative hand type. Ties (most
+ * commonly: none of `cards` belong to this hand type's danger category at all, e.g. following a
+ * spade lead in "noLady" with no queens among the legal spades) break toward the lowest-ranked
+ * card — falling back to the same "duck with minimum wasted value" behavior a plain `lowestCard`
+ * pick would give, rather than an arbitrary card-array-order pick, whenever `dangerScore` itself
+ * has no real signal to offer.
+ */
+function mostDangerous(cards: Card[], handType: NegativeHandType, backwards: boolean): Card {
+  return cards.reduce((best, c) => {
+    const cScore = dangerScore(c, handType);
+    const bestScore = dangerScore(best, handType);
+    if (cScore > bestScore) return c;
+    if (cScore === bestScore && rankValue(c.rank, backwards) < rankValue(best.rank, backwards)) return c;
+    return best;
+  });
 }
+
+/**
+ * Below this trump length, `choosePositiveLead`'s "no master, but lead trump anyway to draw
+ * opponents out" branch stays off — holding merely 3-4 of a 13-card suit isn't control, it's just
+ * a decent length, and proactively burning a card like a bare King of trump while the Ace is still
+ * unseen (neither played nor in hand) is a real risk no table player would take on that thin a
+ * holding. At 5+ (well above the ~3.25-per-suit average across 4 hands, meaning the other three
+ * players combined hold at most 8), the length itself is close enough to a real trump-control
+ * signal that leading is worth it even without a proven master — see .claude/skills/
+ * king-ai-opponent and `chooseCard.test.ts`'s regression test for the exact scenario this fixes.
+ */
+const TRUMP_LEAD_CONTROL_LENGTH = 5;
 
 // No Last Two Tricks: only the final 2 tricks (13 total) carry any penalty risk. Tricks before
 // that are free to win — the skill's own guidance: "track trick count remaining; bias toward not
@@ -96,8 +122,9 @@ function bestMaster(cards: Card[], hand: Card[], tracker: CardTracker, ruleSet: 
  * 1. A "master" card (guaranteed the highest remaining of its suit — see `isMasterCard`) is the
  *    strongest available signal short of a full search; lead the master from the longest such
  *    suit, extending control over that suit as long as possible.
- * 2. Failing that, with real trump length (3+) and a trump in play, lead trump to draw out
- *    opponents' trumps while still in control, rather than risking a side-suit lead into a ruff.
+ * 2. Failing that, with near-certain trump control (`TRUMP_LEAD_CONTROL_LENGTH`+) and a trump in
+ *    play, lead trump to draw out opponents' trumps while still in control, rather than risking a
+ *    side-suit lead into a ruff. A merely decent holding below that bar is held in reserve.
  * 3. Otherwise, lead the highest card from whichever suit is both long in hand and has the fewest
  *    opponents already known void in it (fewer void opponents = lower ruff risk).
  */
@@ -135,9 +162,11 @@ function choosePositiveLead(
   }
   if (bestSafeMaster !== null) return bestSafeMaster;
 
-  // No guaranteed winner available. With real trump length, lead trump to draw opponents' trumps
-  // out while still in control, rather than risking an unproven side-suit lead into a ruff.
-  if (trumpSuit !== null && suitLength(hand, trumpSuit) >= 3) {
+  // No guaranteed winner available. Only with genuine trump length — near-certain control, not
+  // just a decent holding — lead trump to draw opponents' trumps out while still in control,
+  // rather than risking an unproven side-suit lead into a ruff. Below that bar, hold trump back
+  // instead of spending it recklessly (see TRUMP_LEAD_CONTROL_LENGTH's doc comment).
+  if (trumpSuit !== null && suitLength(hand, trumpSuit) >= TRUMP_LEAD_CONTROL_LENGTH) {
     const trumpCards = bySuit.get(trumpSuit);
     if (trumpCards !== undefined) return highestCard(trumpCards, ruleSet.backwards);
   }
@@ -145,8 +174,14 @@ function choosePositiveLead(
   // Otherwise, the safest available lead: fewest known-void opponents, then longest suit, then —
   // if suits are still tied on both — whichever suit's own best card outranks the others', so
   // this degrades to "just lead the single highest legal card" exactly when length/void give no
-  // real signal, rather than an arbitrary pick among equally-long, equally-safe suits.
-  const suits = [...bySuit.keys()].sort((a, b) => {
+  // real signal, rather than an arbitrary pick among equally-long, equally-safe suits. Trump is
+  // deliberately excluded here — it's already been considered above (master, or real control
+  // length) and rejected, so letting it compete on raw length/void like any other suit would
+  // silently reopen the same "burn a decent-but-not-controlling trump holding" bug those branches
+  // exist to prevent. Only fall through to trump if it's genuinely the only suit left to lead.
+  const nonTrumpSuits = [...bySuit.keys()].filter((suit) => suit !== trumpSuit);
+  const candidates = nonTrumpSuits.length > 0 ? nonTrumpSuits : [...bySuit.keys()];
+  const suits = candidates.sort((a, b) => {
     const voidDiff = opponentVoidCount(tracker, player, a) - opponentVoidCount(tracker, player, b);
     if (voidDiff !== 0) return voidDiff;
     const lengthDiff = suitLength(hand, b) - suitLength(hand, a);
@@ -193,7 +228,15 @@ export function chooseCardHeuristic(state: GameState, player: PlayerIndex, track
     // separately — negative hands lead low (safest; there's no trump to weigh and a global-lowest
     // lead maximizes safety on the trick actually in front of them, so tracking doesn't change
     // this branch), positive hands lead high, tracking-aware when enabled.
-    if (!isPositive) return lowestCard(legal, ruleSet.backwards);
+    if (!isPositive) {
+      // Exclude self-evidently dominated leads first (a proven master, guaranteed to win its own
+      // trick with no trump around to ever be beaten) — see `nonDominatedLeads`'s doc comment.
+      // Almost always a no-op here (a master is usually a high card, not the lowest legal one),
+      // but makes the avoidance explicit and shared with ISMCTS's root instead of relying on
+      // "lead lowest" to dodge it by incidental luck.
+      const safeLeads = nonDominatedLeads(legal, state.hands[player], trackCards(state));
+      return lowestCard(safeLeads, ruleSet.backwards);
+    }
     if (!tracking) return highestCard(legal, ruleSet.backwards);
     return choosePositiveLead(state, player, legal, trackCards(state), ruleSet, currentTrumpSuit(state));
   }
@@ -209,9 +252,12 @@ export function chooseCardHeuristic(state: GameState, player: PlayerIndex, track
 
   if (nonWinners.length === 0) return lowestCard(legal, ruleSet.backwards); // forced to win — least-bad option
 
-  const ledSuit = state.currentTrick[0].card.suit;
-  const isVoidDiscard = !legal.some((c) => c.suit === ledSuit);
-  return isVoidDiscard
-    ? mostDangerous(nonWinners, state.handType as NegativeHandType)
-    : lowestCard(nonWinners, ruleSet.backwards); // following suit: duck under with the lowest safe card
+  // Not forced to win: every nonWinner is a card that's already beaten by an earlier play in this
+  // trick, a permanent, stable fact (a card's own rank can't retroactively change, and being
+  // already-beaten never gets undone by a later play) — so this is a genuinely safe, zero-cost
+  // moment to shed the specific card that's dangerous for this hand type (e.g. play the Queen
+  // under an Ace in No Queens), rather than saving it and hoping for another safe window later.
+  // True whether this is a void discard or a following-suit duck — both are equally safe, so both
+  // use the same "shed the most dangerous safe card" logic, not two different rules.
+  return mostDangerous(nonWinners, state.handType as NegativeHandType, ruleSet.backwards);
 }

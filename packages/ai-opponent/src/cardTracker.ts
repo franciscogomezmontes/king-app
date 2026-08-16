@@ -61,3 +61,25 @@ export function isMasterCard(card: Card, hand: Card[], tracker: CardTracker): bo
 export function opponentVoidCount(tracker: CardTracker, player: PlayerIndex, suit: Suit): number {
   return ALL_SEATS.filter((seat) => seat !== player && tracker.voidSuits[seat].has(suit)).length;
 }
+
+/**
+ * Filters `legal` leads down to ones that aren't self-evidently dominated for a negative
+ * (no-trump) hand: a card that's already the guaranteed highest remaining of its suit
+ * (`isMasterCard`) is mathematically certain to win its own trick when led into an otherwise-
+ * empty trick, since a negative hand never has trump to create any chance of it being beaten
+ * (`currentTrumpSuit` is always null for negative hands — no trump exception to account for here
+ * the way `choosePositiveLead`'s master-trump branch needs one). A negative hand's entire goal is
+ * to avoid winning tricks, so leading a proven master is never correct except when every legal
+ * lead is equally dominated (a genuinely forced position) — in that case this returns `legal`
+ * unfiltered rather than an empty array. Only meaningful for leading into an empty trick in a
+ * negative hand; callers are responsible for only invoking this in that context. Shared by
+ * `chooseCardHeuristic`'s own negative-hand lead branch and `ismctsChooseCard`'s root candidate
+ * set, so both tiers rely on the same domain fact instead of the heuristic dodging it by luck (its
+ * "always lead the single lowest card" rule happens to avoid this in practice, but only
+ * incidentally) and the search having no equivalent safeguard at all — see
+ * .claude/skills/king-ai-opponent.
+ */
+export function nonDominatedLeads(legal: Card[], hand: Card[], tracker: CardTracker): Card[] {
+  const safe = legal.filter((card) => !isMasterCard(card, hand, tracker));
+  return safe.length > 0 ? safe : legal;
+}

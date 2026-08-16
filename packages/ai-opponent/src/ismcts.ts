@@ -1,5 +1,5 @@
 import { applyAction, Card, createDeck, GameState, legalCardsFor, PlayerIndex, RandomSource, shuffle, Suit } from "rules-engine";
-import { CardTracker, trackCards } from "./cardTracker";
+import { CardTracker, nonDominatedLeads, trackCards } from "./cardTracker";
 import { chooseCardHeuristic } from "./heuristic";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
@@ -130,8 +130,25 @@ interface RewardRange {
 }
 
 /** One full ISMCTS iteration: a fresh determinization, then select/expand down the shared tree,
- * roll out the rest of the hand with Tier 1, and back-propagate the real score. */
-function runIteration(root: TreeNode, state: GameState, player: PlayerIndex, random: RandomSource, rewardRange: RewardRange): void {
+ * roll out the rest of the hand with Tier 1, and back-propagate the real score.
+ *
+ * `rootCandidates`, when non-null, restricts which actions are ever considered at the tree's
+ * root node specifically (`node === root`, i.e. depth 0 of this iteration — the real decision
+ * being searched, before any determinization-specific divergence) — see `ismctsChooseCard`'s own
+ * doc comment for why: excluding self-evidently dominated negative-hand leads (a proven master,
+ * guaranteed to win with no trump to ever beat it) before the search spends any of its modest
+ * budget on them, rather than trusting the budget to statistically discover what's already a known
+ * domain fact. Every deeper node (any other decision point reached later in a rollout/traversal,
+ * including this same player leading again in a later trick) is unaffected — full `legalCardsFor`
+ * as always. */
+function runIteration(
+  root: TreeNode,
+  state: GameState,
+  player: PlayerIndex,
+  random: RandomSource,
+  rewardRange: RewardRange,
+  rootCandidates: Card[] | null,
+): void {
   const deal = determinizeHands(state, player, random);
   let current: GameState = { ...state, hands: deal };
   let node = root;
@@ -140,7 +157,7 @@ function runIteration(root: TreeNode, state: GameState, player: PlayerIndex, ran
   // Select + expand.
   while (current.phase === "playing") {
     const mover = current.currentTurn;
-    const legal = legalCardsFor(current, mover);
+    const legal = node === root && rootCandidates !== null ? rootCandidates : legalCardsFor(current, mover);
 
     for (const card of legal) {
       const child = node.children.get(cardKey(card));
@@ -201,6 +218,13 @@ export const EXPERT_BUDGET_MS = 900;
  *
  * `budgetMs` is a parameter (not hardcoded to `HARD_BUDGET_MS`/`EXPERT_BUDGET_MS`) specifically so
  * tests can drive this with tiny/zero budgets without waiting on production-length searches.
+ *
+ * For a negative-hand lead specifically, the root's candidate set excludes self-evidently
+ * dominated moves (`nonDominatedLeads` — a proven master card, guaranteed to win its own trick
+ * with no trump in a negative hand to ever beat it) before the search even starts, rather than
+ * relying on a modest time budget spread across a wide branching factor to statistically discover
+ * what's already a known domain fact — see .claude/skills/king-ai-opponent and `runIteration`'s
+ * own doc comment for exactly where this applies (root only, not every node in the tree).
  */
 export function ismctsChooseCard(
   state: GameState,
@@ -211,17 +235,24 @@ export function ismctsChooseCard(
   const rootLegal = legalCardsFor(state, player);
   if (rootLegal.length <= 1) return rootLegal[0];
 
+  const rootCandidates: Card[] | null =
+    state.handType !== "positive" && state.currentTrick.length === 0
+      ? nonDominatedLeads(rootLegal, state.hands[player], trackCards(state))
+      : null;
+  if (rootCandidates !== null && rootCandidates.length === 1) return rootCandidates[0];
+
   const root = newNode();
   const rewardRange: RewardRange = { min: Infinity, max: -Infinity };
   const deadline = Date.now() + budgetMs;
 
   while (Date.now() < deadline) {
-    runIteration(root, state, player, random, rewardRange);
+    runIteration(root, state, player, random, rewardRange, rootCandidates);
   }
 
+  const searchSpace = rootCandidates ?? rootLegal;
   let bestCard: Card | null = null;
   let bestAverage = -Infinity;
-  for (const card of rootLegal) {
+  for (const card of searchSpace) {
     const child = root.children.get(cardKey(card));
     if (child === undefined || child.visits === 0) continue;
     const average = child.totalReward / child.visits;
