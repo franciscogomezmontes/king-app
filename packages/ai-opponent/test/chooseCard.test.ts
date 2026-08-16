@@ -27,6 +27,13 @@ function dummyTrick(winner: PlayerIndex): Trick {
   };
 }
 
+/** A completed trick with caller-specified plays — for tests that need specific cards to have
+ * already fallen (e.g. to make a card a "master"). The winner is arbitrary; nothing under test
+ * reads it. */
+function dummyTrickOf(plays: { player: PlayerIndex; card: Card }[]): Trick {
+  return { plays, winner: plays[0].player };
+}
+
 function withPositiveSetup(state: GameState, trump: Card["suit"] | null = null): GameState {
   return {
     ...state,
@@ -163,6 +170,77 @@ describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winn
       currentTurn: 1,
     };
     expect(chooseCard(state, 1)).toEqual(card("S", 3));
+  });
+});
+
+describe('chooseCard — "normal" difficulty leading, card-tracking aware', () => {
+  it("leads a master card over a merely-higher-ranked but unproven one", () => {
+    // Spades' Ace, King, and Queen are already gone — the 10 of spades is now the highest
+    // remaining spade (a "master"), even though the King of Diamonds outranks it numerically and
+    // is what the flat highest-card heuristic would pick instead.
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        completedTricks: [
+          dummyTrickOf([
+            { player: 1, card: card("S", 14) },
+            { player: 2, card: card("S", 13) },
+            { player: 3, card: card("S", 12) },
+            { player: 0, card: card("S", 11) },
+          ]),
+        ],
+        hands: { 0: [card("S", 10), card("D", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      null,
+    );
+    expect(chooseCard(state, 0, "normal")).toEqual(card("S", 10));
+  });
+
+  it("leads trump to draw it out when holding real trump length, over a higher-ranked side card", () => {
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: [card("H", 9), card("H", 10), card("H", 11), card("S", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    expect(chooseCard(state, 0, "normal")).toEqual(card("H", 11));
+  });
+
+  it('"easy" difficulty (heuristic path, no randomness triggered) still leads the flat-highest card', () => {
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: [card("H", 9), card("H", 10), card("H", 11), card("S", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    const neverRandom = () => 0.99; // stays above EASY_RANDOMNESS's threshold every time
+    expect(chooseCard(state, 0, "easy", neverRandom)).toEqual(card("S", 13));
+  });
+
+  it('"easy" difficulty occasionally overrides the heuristic with a uniformly random legal card', () => {
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: [card("S", 9), card("H", 2), card("D", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      null,
+    );
+    const alwaysRandomFirst = () => 0; // triggers the random branch, then picks index 0
+    expect(chooseCard(state, 0, "easy", alwaysRandomFirst)).toEqual(card("S", 9));
   });
 });
 

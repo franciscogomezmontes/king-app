@@ -6,11 +6,22 @@ import {
   legalCardsFor,
   NegativeHandType,
   PlayerIndex,
+  RandomSource,
   rankValue,
   resolveTrick,
   RuleSet,
+  Suit,
   TrumpSuit,
 } from "rules-engine";
+import { CardTracker, isMasterCard, opponentVoidCount, trackCards } from "./cardTracker";
+
+/** "easy" is today's heuristic with some randomness mixed in (per .claude/skills/king-ai-opponent:
+ * "Easy can even just be the Tier 1 heuristic bot with intentional randomness mixed in"). "normal"
+ * adds card-tracking awareness (see cardTracker.ts) to leading decisions in positive hands — the
+ * gap flagged against the plain heuristic: leads always went highest/lowest with no regard for
+ * suit length, trump holdings, or what's already been played/shown void. Tier 2 (ISMCTS,
+ * search-based, a difficulty in its own right) is a separate, later piece of work. */
+export type Difficulty = "easy" | "normal";
 
 /** Would playing `card` right now win the trick? Exact when `player` is last to act; a sound
  * heuristic signal otherwise. Reuses `resolveTrick` itself rather than reimplementing rank/trump
@@ -36,6 +47,20 @@ function highestCard(cards: Card[], backwards: boolean): Card {
   return cards.reduce((best, c) =>
     rankValue(c.rank, backwards) > rankValue(best.rank, backwards) ? c : best,
   );
+}
+
+function suitLength(hand: Card[], suit: Suit): number {
+  return hand.filter((c) => c.suit === suit).length;
+}
+
+function groupBySuit(cards: Card[]): Map<Suit, Card[]> {
+  const map = new Map<Suit, Card[]>();
+  for (const card of cards) {
+    const list = map.get(card.suit);
+    if (list) list.push(card);
+    else map.set(card.suit, [card]);
+  }
+  return map;
 }
 
 /**
@@ -69,16 +94,80 @@ function mostDangerous(cards: Card[], handType: NegativeHandType): Card {
 const NO_LAST_TWO_SAFE_TRICKS = 11;
 
 /**
- * Picks a card to play for `player`, given the full game state. Tier 1 heuristic bot — see
- * .claude/skills/king-ai-opponent. Always legal: every branch below chooses only from
- * `legalCardsFor`, never a hand-rolled legality check.
+ * Leading a positive-hand trick, aware of what's already been played and shown void (`tracker`) —
+ * the "normal" difficulty's specific improvement over always leading the flat-highest card:
  *
- * The core trick: reuse `resolveTrick` itself (via `wouldCurrentlyWin`) to ask "would playing
- * this card currently win the trick?" — that single primitive drives both "avoid winning"
- * (negative hands) and "win cheaply" (positive hands) without reimplementing rank/trump
- * comparisons.
+ * 1. A "master" card (guaranteed the highest remaining of its suit — see `isMasterCard`) is the
+ *    strongest available signal short of a full search; lead the master from the longest such
+ *    suit, extending control over that suit as long as possible.
+ * 2. Failing that, with real trump length (3+) and a trump in play, lead trump to draw out
+ *    opponents' trumps while still in control, rather than risking a side-suit lead into a ruff.
+ * 3. Otherwise, lead the highest card from whichever suit is both long in hand and has the fewest
+ *    opponents already known void in it (fewer void opponents = lower ruff risk).
  */
-export function chooseCard(state: GameState, player: PlayerIndex): Card {
+function bestMaster(cards: Card[], hand: Card[], tracker: CardTracker, ruleSet: RuleSet): Card | null {
+  const masters = cards.filter((c) => isMasterCard(c, hand, tracker));
+  return masters.length > 0 ? highestCard(masters, ruleSet.backwards) : null;
+}
+
+function choosePositiveLead(
+  state: GameState,
+  player: PlayerIndex,
+  legal: Card[],
+  tracker: CardTracker,
+  ruleSet: RuleSet,
+  trumpSuit: TrumpSuit,
+): Card {
+  const hand = state.hands[player];
+  const bySuit = groupBySuit(legal);
+
+  // A master trump is the strongest possible lead — nothing beats it, and being trump itself it
+  // can't be ruffed the way a master in a plain suit can.
+  if (trumpSuit !== null) {
+    const masterTrump = bestMaster(bySuit.get(trumpSuit) ?? [], hand, tracker, ruleSet);
+    if (masterTrump !== null) return masterTrump;
+  }
+
+  // A master in a non-trump suit only stays safe to lead if no opponent has already shown void in
+  // that suit — a depleted suit (which is exactly what makes a card its "master") also means
+  // opponents are more likely to be void in it, and a void opponent can simply ruff instead of
+  // following. Restrict to the suits with zero known voids before picking the best master.
+  const safeSuits = [...bySuit.entries()].filter(
+    ([suit]) => suit !== trumpSuit && opponentVoidCount(tracker, player, suit) === 0,
+  );
+  let bestSafeMaster: Card | null = null;
+  for (const [, cards] of safeSuits) {
+    const master = bestMaster(cards, hand, tracker, ruleSet);
+    if (master !== null && (bestSafeMaster === null || suitLength(hand, master.suit) > suitLength(hand, bestSafeMaster.suit))) {
+      bestSafeMaster = master;
+    }
+  }
+  if (bestSafeMaster !== null) return bestSafeMaster;
+
+  // No guaranteed winner available. With real trump length, lead trump to draw opponents' trumps
+  // out while still in control, rather than risking an unproven side-suit lead into a ruff.
+  if (trumpSuit !== null && suitLength(hand, trumpSuit) >= 3) {
+    const trumpCards = bySuit.get(trumpSuit);
+    if (trumpCards !== undefined) return highestCard(trumpCards, ruleSet.backwards);
+  }
+
+  // Otherwise, the safest available lead: fewest known-void opponents, then longest suit, then —
+  // if suits are still tied on both — whichever suit's own best card outranks the others', so
+  // this degrades to "just lead the single highest legal card" exactly when length/void give no
+  // real signal, rather than an arbitrary pick among equally-long, equally-safe suits.
+  const suits = [...bySuit.keys()].sort((a, b) => {
+    const voidDiff = opponentVoidCount(tracker, player, a) - opponentVoidCount(tracker, player, b);
+    if (voidDiff !== 0) return voidDiff;
+    const lengthDiff = suitLength(hand, b) - suitLength(hand, a);
+    if (lengthDiff !== 0) return lengthDiff;
+    const aTop = rankValue(highestCard(bySuit.get(a)!, ruleSet.backwards).rank, ruleSet.backwards);
+    const bTop = rankValue(highestCard(bySuit.get(b)!, ruleSet.backwards).rank, ruleSet.backwards);
+    return bTop - aTop;
+  });
+  return highestCard(bySuit.get(suits[0])!, ruleSet.backwards);
+}
+
+function chooseCardCore(state: GameState, player: PlayerIndex, tracking: boolean): Card {
   const legal = legalCardsFor(state, player);
   if (legal.length === 1) return legal[0];
 
@@ -95,8 +184,12 @@ export function chooseCard(state: GameState, player: PlayerIndex): Card {
 
   if (state.currentTrick.length === 0) {
     // Leading: "would currently win" is vacuous (nothing to beat yet), so this is handled
-    // separately — negative hands lead low (safest), positive hands lead high (aggressive).
-    return isPositive ? highestCard(legal, ruleSet.backwards) : lowestCard(legal, ruleSet.backwards);
+    // separately — negative hands lead low (safest; there's no trump to weigh and a global-lowest
+    // lead maximizes safety on the trick actually in front of them, so tracking doesn't change
+    // this branch), positive hands lead high, tracking-aware when enabled.
+    if (!isPositive) return lowestCard(legal, ruleSet.backwards);
+    if (!tracking) return highestCard(legal, ruleSet.backwards);
+    return choosePositiveLead(state, player, legal, trackCards(state), ruleSet, currentTrumpSuit(state));
   }
 
   const trumpSuit = currentTrumpSuit(state);
@@ -115,4 +208,36 @@ export function chooseCard(state: GameState, player: PlayerIndex): Card {
   return isVoidDiscard
     ? mostDangerous(nonWinners, state.handType as NegativeHandType)
     : lowestCard(nonWinners, ruleSet.backwards); // following suit: duck under with the lowest safe card
+}
+
+// How often "easy" ignores its own heuristic and just plays a uniformly random legal card instead
+// — enough to be a noticeably weaker, less consistent opponent without playing outright illegally
+// or nonsensically most of the time.
+const EASY_RANDOMNESS = 0.2;
+
+/**
+ * Picks a card to play for `player`, given the full game state. Tier 1 heuristic bot — see
+ * .claude/skills/king-ai-opponent. Always legal: every branch chooses only from `legalCardsFor`,
+ * never a hand-rolled legality check.
+ *
+ * The core trick: reuse `resolveTrick` itself (via `wouldCurrentlyWin`) to ask "would playing
+ * this card currently win the trick?" — that single primitive drives both "avoid winning"
+ * (negative hands) and "win cheaply" (positive hands) without reimplementing rank/trump
+ * comparisons.
+ *
+ * `difficulty` (default "normal") controls how the bot uses this: see the `Difficulty` doc above.
+ */
+export function chooseCard(
+  state: GameState,
+  player: PlayerIndex,
+  difficulty: Difficulty = "normal",
+  random: RandomSource = Math.random,
+): Card {
+  if (difficulty === "normal") return chooseCardCore(state, player, true);
+
+  const legal = legalCardsFor(state, player);
+  if (legal.length > 1 && random() < EASY_RANDOMNESS) {
+    return legal[Math.floor(random() * legal.length)];
+  }
+  return chooseCardCore(state, player, false);
 }

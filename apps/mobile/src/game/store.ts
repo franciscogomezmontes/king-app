@@ -39,8 +39,12 @@ interface Bot {
 
 function makeBot(difficulty: Difficulty, random: RandomSource): Bot {
   if (difficulty === "normal") return aiOpponent;
+  // "Easy" now routes card play through ai-opponent's own easy difficulty (today's plain
+  // heuristic plus some randomness — see chooseCard.ts) instead of a fully-random card pick, so
+  // the two difficulties are actually distinguishable in more than just bidding/trump/dealer
+  // choices. Those four decisions still use the simple always-random easyBot module, unchanged.
   return {
-    chooseCard: (s, p) => easyBot.chooseCard(s, p, random),
+    chooseCard: (s, p) => aiOpponent.chooseCard(s, p, "easy", random),
     shouldOpenAuction: (s, p) => easyBot.shouldOpenAuction(s, p, random),
     chooseTrumpDeclaration: (s, p) => easyBot.chooseTrumpDeclaration(s, p, random),
     chooseBid: (s, p) => easyBot.chooseBid(s, p, random),
