@@ -130,6 +130,9 @@ importers:
         specifier: workspace:*
         version: link:../rules-engine
     devDependencies:
+      fast-check:
+        specifier: ^3.23.1
+        version: 3.23.2
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

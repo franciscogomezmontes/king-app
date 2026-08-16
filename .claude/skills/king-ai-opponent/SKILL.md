@@ -30,14 +30,77 @@ never hand-roll legality inside the bot. On top of legality, apply simple per-ha
 
 ## Tier 2 — Information Set Monte Carlo Tree Search (ISMCTS)
 
-The standard technique for imperfect-information trick-taking games (the bot doesn't know the
-other three hands). At decision time: sample plausible deals of the unseen cards consistent with
-what's been played/discarded so far (respecting known voids), run tree search/playouts on each
-sampled deal using the heuristic bot (or a simpler rollout policy) as the playout policy, aggregate
-results across samples to pick a move.
+Implemented in `packages/ai-opponent/src/ismcts.ts`, backing `chooseCard`'s "hard" (Difícil) and
+"expert" (Experto) difficulties — see `chooseCard.ts`'s dispatcher. `chooseCard(state, player,
+difficulty)`'s public signature never changed; only the internal dispatch grew two more branches.
 
-- Difficulty levels = search budget (iterations or time cap), not a different algorithm — "Easy"
-  can even just be the Tier 1 heuristic bot with intentional randomness mixed in.
+**Why Tier 1 moved to its own file.** `heuristic.ts` holds what used to live directly in
+`chooseCard.ts` (`chooseCardHeuristic`, renamed from the old private `chooseCardCore`) — pulled out
+so `ismcts.ts` could import it as its rollout policy without a circular dependency (`chooseCard.ts`
+already needs to import `ismcts.ts` to dispatch "hard"/"expert" to it). The logic itself is
+untouched, just relocated.
+
+**Determinization** (`determinizeHands`, same file): samples one plausible full deal of every card
+the searching player can't already see, using only public information — `cardTracker.ts`'s
+`voidSuits` (never lead a determinized opponent hand a card of a suit they've already shown void
+in) and each opponent's known remaining card *count* (`state.hands[opponent].length` — always
+visible at a real table, just not *which* cards). Never reads the actual contents of another
+player's hand; that would defeat the entire point of determinizing in the first place. Deals
+"most-constrained-first" (cards of a suit voided by more opponents go first, since they have fewer
+legal homes) to minimize how often a single pass paints itself into a corner; a failed attempt
+just reshuffles and retries, and the last of a bounded number of attempts relaxes voids entirely
+rather than ever throwing — a slightly-wrong determinization beats a bot that crashes.
+
+**Search** (`ismctsChooseCard`): one shared tree per decision (not one tree per determinization —
+that's the "IS" in ISMCTS). Each iteration: fresh determinization, select/expand down the tree via
+UCB1 until an untried action is found, expand exactly one new node there, then **roll out the rest
+of the hand using `chooseCardHeuristic` (Tier 1, tracking on) for every seat** — reusing the real
+Tier 1 policy instead of writing a second, weaker one just for rollouts. The leaf reward is read
+directly off the resulting `GameState.handHistory[...].scores[player]` — i.e. the actual
+`scoreNegativeHand`/`scorePositiveHand` output for that hand type, not a proxy like "tricks won."
+This matters concretely: `noKingOfHearts` is one flat -160 swing on a single card, `noHearts` is
+-20 per heart captured — a proxy metric can't tell those apart, real scoring can.
+
+UCB1 selection normalizes reward to `[0, 1]` per search using the min/max reward actually observed
+so far, since raw score deltas span wildly different ranges by hand type (a positive hand's per-
+trick payout looks nothing like `noKingOfHearts`'s single -160). ISMCTS's own correction over plain
+UCB1 — a node's `availability` count, not the parent's `visits` — feeds the exploration term,
+since an action isn't a candidate in every determinization (it might not be legal in that sampled
+world).
+
+Root move selection: **best average reward** (`totalReward / visits`) among the root's actually-
+visited children, not the more common "most-visited child" (which trades off differently and isn't
+what was asked for here). If the budget expires before a single iteration completes (a near-zero
+budget), falls back to the plain Tier 1 heuristic rather than returning nothing.
+
+**Legality is structural, not checked after the fact**: every action considered anywhere in the
+search — tree selection/expansion *and* rollout — comes from `legalCardsFor` (directly, or via
+`chooseCardHeuristic`, which itself only ever chooses from `legalCardsFor`). There's no separate
+legality check layered on top because there's nothing for it to catch.
+
+**Tunables** (`ismcts.ts`, documented the same way as `AUCTION_THRESHOLD`/`MIN_TRUMP_SUIT_LENGTH`):
+- `HARD_BUDGET_MS` (Difícil) — a modest budget targeting ~150-300ms per decision on a mid-range
+  phone.
+- `EXPERT_BUDGET_MS` (Experto) — a deliberately larger budget for a noticeably stronger, slower
+  opponent.
+- `UCB1_EXPLORATION` — the exploration/exploitation balance against normalized-`[0,1]` reward;
+  0.7 was chosen empirically for the small-budget regime this bot runs under (the textbook
+  `sqrt(2)`, calibrated for the general bounded-reward case, tends to over-explore here).
+- `MAX_DETERMINIZE_ATTEMPTS` (in `determinizeHands`) — how many times a failed most-constrained-
+  first deal gets reshuffled and retried before the final, void-relaxed fallback attempt.
+
+**Performance — this runs synchronously on the JS thread, with no yield points inside the search
+loop.** That's a deliberate choice per this skill's own "ship the synchronous version first and
+measure" principle, but it has a real consequence worth stating plainly: a "hard"/"expert" decision
+*will* block the JS thread (and therefore UI rendering/input) for the full budget — up to
+`HARD_BUDGET_MS` or `EXPERT_BUDGET_MS` — every single time that bot plays a card. This is a
+structural fact of a tight `while (Date.now() < deadline)` loop with no `await`/yield inside it, not
+something that needs re-verifying per change. If a future session wires "hard"/"expert" into the
+real UI and this jank is unacceptable, the fix is moving the search off the JS thread (a Web Worker
+on web; a native module or JSI approach on mobile) — don't build that machinery pre-emptively; only
+reach for it once the synchronous version is actually in front of players and the jank is a
+confirmed, not just anticipated, problem.
+
 - Keep ISMCTS bot logic in `packages/ai-opponent`, sharing the same legality/scoring calls into
   `rules-engine` as Tier 1 — never let the bot's internal simulation diverge from the real engine's
   rules, or it will "cheat" by reasoning about illegal lines.
@@ -50,3 +113,24 @@ results across samples to pick a move.
   more than one reasonable play.
 - For any change, sanity-run full games bot-vs-bot and confirm the game still resolves to a valid
   zero-sum final score (this exercises the rules-engine integration, not just the heuristic).
+- A difficulty upgrade isn't proven by "doesn't crash" alone — back it with a same-seed paired
+  comparison (identical deals for both difficulties, only the difficulty under test changed) over
+  enough hands/games that the margin is clearly real, not noise; check the actual numbers before
+  trusting the assertion; see `test/difficultyComparison.test.ts` (leader-trick-win-rate, isolating
+  a specific leading-heuristic change) and `test/hardVsNormal.test.ts` (full-game cumulative score,
+  isolating ISMCTS's overall strength) for two different metrics fit to two different kinds of
+  change. ISMCTS-in-the-loop comparisons need their own PRNG for the search's internal randomness,
+  entirely separate from the one driving deals — the search can consume a variable, large number of
+  random draws per decision that has nothing to do with how many draws the comparison condition
+  would have consumed at the same point; sharing one PRNG between them desyncs every deal after the
+  first divergence and silently invalidates the "same seed -> same deals" premise the comparison
+  depends on.
+- ISMCTS-specific: test `determinizeHands` on its own (own hand preserved exactly, opponent hand
+  sizes match `state.hands[opponent].length`, no card dealt twice or already-played, voids never
+  violated) — hand-built `GameState` fixtures for this must keep the same 52-card accounting any
+  real reachable state has (own hand + played cards + every opponent's remaining hand = 52), or
+  determinization will correctly reject the fixture as unsatisfiable.
+- Legality is the one property that must hold unconditionally, including at the edges: a
+  property-based test (fast-check) across random game states *and* random search budgets down to
+  zero is what actually exercises "the budget expired before any iteration completed" — a case
+  regular example-based tests are easy to forget.
