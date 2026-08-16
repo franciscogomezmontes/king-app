@@ -3,10 +3,21 @@ import type { ImageSourcePropType } from "react-native";
 import { colors, fonts } from "../theme";
 import { DealerBadge } from "./DealerBadge";
 
-export type AvatarSize = "sm" | "md" | "lg";
+export type AvatarSize = "xs" | "sm" | "md" | "lg";
 
-const DIAMETER: Record<AvatarSize, number> = { sm: 40, md: 56, lg: 72 };
-const RING_PADDING = 4;
+// "xs" exists specifically for OpponentSeat's compact table context — three of these plus a name
+// stack above each opponent's card-back/trick-pile, on a screen where every extra pixel of height
+// competes with the player's own hand at the bottom (see GameScreen.tsx's layout comment).
+const DIAMETER: Record<AvatarSize, number> = { xs: 32, sm: 40, md: 56, lg: 72 };
+const RING_PADDING = 3;
+// Scaling the name label down with the avatar keeps a 3-opponent row from looking top-heavy —
+// "xs"'s tighter marginTop specifically is what claws back the height OpponentSeat needed most.
+const NAME_METRICS: Record<AvatarSize, { fontSize: number; marginTop: number }> = {
+  xs: { fontSize: 11, marginTop: 2 },
+  sm: { fontSize: 13, marginTop: 3 },
+  md: { fontSize: 14, marginTop: 4 },
+  lg: { fontSize: 15, marginTop: 4 },
+};
 
 export interface AvatarProps {
   name: string;
@@ -41,6 +52,7 @@ export interface AvatarProps {
 export function Avatar({ name, imageSource, isActive = false, isDealer = false, size = "md" }: AvatarProps) {
   const diameter = DIAMETER[size];
   const ringDiameter = diameter + RING_PADDING * 2;
+  const nameMetrics = NAME_METRICS[size];
 
   return (
     <View style={styles.container}>
@@ -69,7 +81,10 @@ export function Avatar({ name, imageSource, isActive = false, isDealer = false, 
           </View>
         )}
       </View>
-      <Text style={[styles.name, isActive && styles.nameActive]} numberOfLines={1}>
+      <Text
+        style={[styles.name, { fontSize: nameMetrics.fontSize, marginTop: nameMetrics.marginTop }, isActive && styles.nameActive]}
+        numberOfLines={1}
+      >
         {name}
       </Text>
     </View>
@@ -141,7 +156,6 @@ const styles = StyleSheet.create({
     right: -4,
   },
   name: {
-    marginTop: 4,
     color: colors.cream,
     fontFamily: fonts.bodySemi,
     fontSize: 13,

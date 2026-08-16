@@ -23,7 +23,7 @@ export interface OpponentSeatProps {
 export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer, cardBackStyle }: OpponentSeatProps) {
   return (
     <View style={styles.container}>
-      <Avatar name={label} isActive={isCurrentTurn} isDealer={isDealer} size="sm" />
+      <Avatar name={label} isActive={isCurrentTurn} isDealer={isDealer} size="xs" />
       <View style={styles.stack}>
         <CardBack variant={cardBackStyle} />
         <Text style={styles.count}>×{cardCount}</Text>
@@ -36,13 +36,14 @@ export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDea
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    padding: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   stack: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 4,
+    marginTop: 2,
   },
   count: {
     color: colors.secondaryText,

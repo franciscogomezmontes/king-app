@@ -274,7 +274,16 @@ function GameTable({
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
+        // The hand row is the one thing that must never be unreachable — a taller table (avatars,
+        // score bars) on a short real-device viewport (browser chrome eats vertical space
+        // Playwright's emulated viewports don't account for) previously had no way to reach
+        // whatever got pushed below the fold. This is the safety net; the spacing tightened
+        // throughout this screen's styles is what keeps scrolling rarely necessary in practice.
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
           <View style={styles.lastTrickToggle}>
@@ -320,7 +329,7 @@ function GameTable({
         />
         <Text style={styles.turnIndicator}>{turnMessage(decision, isHumanPlaying, seatLabels, t)}</Text>
         <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -526,13 +535,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.felt,
     alignItems: "center",
-    paddingTop: 48,
+    // Was 48 — SafeAreaView already clears a real device's notch/status bar on native, and there's
+    // no such thing to clear on web, so the old value was just unused top padding shrinking the
+    // room left for the table and hand below it. See also ScorePanel/Avatar/OpponentSeat's own
+    // tightened spacing — this screen's vertical budget on a real (shorter than Playwright's
+    // emulated viewports) phone is tight enough that every one of these adds up.
+    paddingTop: spacing.md,
     paddingHorizontal: spacing.lg,
   },
   content: {
     width: "100%",
     alignSelf: "center",
     alignItems: "center",
+    paddingBottom: spacing.lg,
   },
   scrollContainer: {
     width: "100%",

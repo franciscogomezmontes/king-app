@@ -3,6 +3,13 @@ import { HAND_SEQUENCE, PlayerIndex } from "rules-engine";
 import { colors, fonts, radii } from "../theme";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
+/** 2 players per row (Tú/Bot1 on top, Bot2/Bot3 below) rather than 4 stacked rows — roughly halves
+ * this section's height, which matters on a real phone's actual usable viewport height (browser
+ * chrome eats more of it than Playwright's emulated viewports account for). */
+const PLAYER_ROWS: PlayerIndex[][] = [
+  [0, 1],
+  [2, 3],
+];
 /** 10 today, but derived from the same source `game.handIndex`/`handNumber` count against, so a
  * future rule change to the hand count never needs a second place updated. */
 const TOTAL_HANDS = HAND_SEQUENCE.length;
@@ -28,10 +35,36 @@ export interface ScoreProgressProps {
  * hand-count progress (N of 10, always available as `handNumber`) and each player's score relative
  * to the current spread among all four (a zero-centered bar, gold for positive / red for negative,
  * scaled to whoever's furthest from zero right now) — not a fabricated target field. Presentational
- * only: every prop here is data `ScorePanel` already receives from the game screen.
+ * only: every prop here is data `ScorePanel` already receives from the game screen. Player rows lay
+ * out 2-per-row (`PLAYER_ROWS`), not stacked 4-deep, to keep this compact enough that it doesn't
+ * eat into the vertical room the table and the player's own hand need below it.
  */
 export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressProps) {
   const maxMagnitude = Math.max(MIN_BAR_SCALE, ...ALL_SEATS.map((seat) => Math.abs(scores[seat])));
+
+  function renderPlayer(seat: PlayerIndex) {
+    const score = scores[seat];
+    const positive = score >= 0;
+    const fraction = Math.min(1, Math.abs(score) / maxMagnitude);
+    return (
+      <View key={seat} style={styles.playerCell}>
+        <Text style={styles.playerName} numberOfLines={1}>
+          {seatLabels[seat]}
+        </Text>
+        <View style={styles.barTrack}>
+          <View style={styles.barCenter} />
+          <View
+            style={[
+              styles.barFill,
+              positive ? styles.barFillPositive : styles.barFillNegative,
+              positive ? { left: "50%", width: `${fraction * 50}%` } : { right: "50%", width: `${fraction * 50}%` },
+            ]}
+          />
+        </View>
+        <Text style={[styles.playerScore, positive ? styles.scorePositive : styles.scoreNegative]}>{score}</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -43,29 +76,11 @@ export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressP
           <View style={[styles.handFill, { width: `${(handNumber / TOTAL_HANDS) * 100}%` }]} />
         </View>
       </View>
-      {ALL_SEATS.map((seat) => {
-        const score = scores[seat];
-        const positive = score >= 0;
-        const fraction = Math.min(1, Math.abs(score) / maxMagnitude);
-        return (
-          <View key={seat} style={styles.playerRow}>
-            <Text style={styles.playerName} numberOfLines={1}>
-              {seatLabels[seat]}
-            </Text>
-            <View style={styles.barTrack}>
-              <View style={styles.barCenter} />
-              <View
-                style={[
-                  styles.barFill,
-                  positive ? styles.barFillPositive : styles.barFillNegative,
-                  positive ? { left: "50%", width: `${fraction * 50}%` } : { right: "50%", width: `${fraction * 50}%` },
-                ]}
-              />
-            </View>
-            <Text style={[styles.playerScore, positive ? styles.scorePositive : styles.scoreNegative]}>{score}</Text>
-          </View>
-        );
-      })}
+      {PLAYER_ROWS.map((row, i) => (
+        <View key={i} style={styles.playerRow}>
+          {row.map((seat) => renderPlayer(seat))}
+        </View>
+      ))}
     </View>
   );
 }
@@ -74,13 +89,13 @@ const styles = StyleSheet.create({
   container: {
     width: "100%",
     maxWidth: 320,
-    gap: 5,
+    gap: 4,
   },
   handRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   handLabel: {
     color: colors.cream,
@@ -102,18 +117,24 @@ const styles = StyleSheet.create({
   },
   playerRow: {
     flexDirection: "row",
+    gap: 14,
+  },
+  playerCell: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
+    minWidth: 0,
   },
   playerName: {
-    width: 52,
+    width: 40,
     color: colors.secondaryText,
     fontFamily: fonts.body,
-    fontSize: 12,
+    fontSize: 11,
   },
   barTrack: {
     flex: 1,
-    height: 6,
+    height: 5,
     borderRadius: radii.pill,
     backgroundColor: colors.feltWell,
     overflow: "hidden",
@@ -140,10 +161,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.heart,
   },
   playerScore: {
-    width: 36,
+    width: 30,
     textAlign: "right",
     fontFamily: fonts.bodySemi,
-    fontSize: 12,
+    fontSize: 11,
   },
   scorePositive: {
     color: colors.gold,
