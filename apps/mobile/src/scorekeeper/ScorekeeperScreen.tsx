@@ -175,7 +175,7 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
 
     return (
       <SafeAreaView style={styles.container}>
-        <KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <KeyboardAvoidingView style={styles.keyboardAvoider} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
             <Text style={styles.hand}>{t("scorekeeper:hand", { number: editingIndex + 1 })}</Text>
             <Text style={styles.title}>{handName(t, entry.handType)}</Text>
@@ -304,7 +304,7 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoider}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
           <View style={styles.header}>
