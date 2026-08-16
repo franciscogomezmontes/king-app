@@ -1,4 +1,4 @@
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { GameRules } from "rules-engine";
 import {
   Button,
@@ -6,6 +6,7 @@ import {
   CardBack,
   GAME_RULE_TOGGLE_KEYS,
   Surface,
+  Switch,
   colors,
   fonts,
   layout,
@@ -79,8 +80,6 @@ export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
               <Switch
                 value={settings.gameRules[key]}
                 onValueChange={(value) => setGameRule(key, value)}
-                trackColor={{ false: colors.muted, true: colors.gold }}
-                thumbColor={colors.cream}
               />
             </Surface>
           ))}
@@ -96,8 +95,6 @@ export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
           <Switch
             value={settings.saveHistoryEnabled}
             onValueChange={setSaveHistoryEnabled}
-            trackColor={{ false: colors.muted, true: colors.gold }}
-            thumbColor={colors.cream}
           />
         </Surface>
 

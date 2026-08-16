@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { GameRules, GameState, PlayerIndex } from "rules-engine";
 import { canRequestRedeal, highestBid, legalCardsFor, SUITS } from "rules-engine";
 import {
@@ -10,8 +10,10 @@ import {
   Panel,
   Scoreboard,
   ScorePanel,
+  SegmentedToggle,
   SUIT_SYMBOLS,
   Surface,
+  Switch,
   Table,
   colors,
   fonts,
@@ -141,8 +143,6 @@ function Lobby({
                   <Switch
                     value={gameRules[key]}
                     onValueChange={(value) => setGameRules((prev) => ({ ...prev, [key]: value }))}
-                    trackColor={{ false: colors.muted, true: colors.gold }}
-                    thumbColor={colors.cream}
                   />
                 </Surface>
               ))}
@@ -346,8 +346,6 @@ function ActiveOnlineGame({
             <Switch
               value={showLastTrick}
               onValueChange={setShowLastTrick}
-              trackColor={{ false: colors.muted, true: colors.gold }}
-              thumbColor={colors.cream}
             />
           </View>
         </View>
@@ -437,18 +435,22 @@ function OnlineDecisionPanel({
           </Pressable>
         </View>
         {game.ruleSet.playingDownEnabled && (
-          <Pressable style={styles.toggle} onPress={() => setDirection((d) => (d === "up" ? "down" : "up"))}>
-            <Text style={styles.toggleLabel}>
-              {direction === "up" ? t("rules:playingDirection.up") : t("rules:playingDirection.down")}
-            </Text>
-          </Pressable>
+          <View style={styles.toggle}>
+            <SegmentedToggle
+              value={direction}
+              onChange={setDirection}
+              options={[
+                { value: "up", label: t("rules:playingDirection.up") },
+                { value: "down", label: t("rules:playingDirection.down") },
+              ]}
+            />
+          </View>
         )}
         {game.ruleSet.backwardsEnabled && (
-          <Pressable style={styles.toggle} onPress={() => setBackwards((b) => !b)}>
-            <Text style={styles.toggleLabel}>
-              {t("rules:ruleToggles.backwardsEnabled.name")}: {backwards ? "✓" : "✗"}
-            </Text>
-          </Pressable>
+          <View style={[styles.toggle, styles.backwardsRow]}>
+            <Text style={styles.toggleLabel}>{t("rules:ruleToggles.backwardsEnabled.name")}</Text>
+            <Switch value={backwards} onValueChange={setBackwards} />
+          </View>
         )}
         {decision.canOpenAuction && (
           <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.inlineButton} />
@@ -768,6 +770,11 @@ const styles = StyleSheet.create({
   toggle: {
     marginTop: spacing.sm,
     paddingVertical: 4,
+  },
+  backwardsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   toggleLabel: {
     color: colors.secondaryText,
