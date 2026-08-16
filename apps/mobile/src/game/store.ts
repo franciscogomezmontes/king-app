@@ -183,6 +183,23 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * A zero-length but *real* macrotask yield (a `setTimeout`, not just an `await`ed already-resolved
+ * promise, which only yields a microtask and never lets the browser paint) — the standard way to
+ * let a just-applied state update actually reach the screen before the JS thread picks up its next
+ * chunk of synchronous work. Critical specifically for "hard"/"expert": ISMCTS's search (ismcts.ts)
+ * is one long synchronous call with no yield points inside it (see .claude/skills/king-ai-opponent's
+ * "Performance" section — this is a known, deliberate trade-off, not a bug in the search itself).
+ * Without a real yield *between* each bot's decision, several decisions in a row can run back-to-
+ * back with no paint in between (every `await` in between them resolves immediately, since the
+ * decision already took longer than `botDelayMs`, so `pacedDecision` adds no padding) — the human
+ * sees every card in the trick pop in at once, well after tapping their own, instead of one at a
+ * time with each one's fade-in actually visible.
+ */
+function yieldToBrowser(): Promise<void> {
+  return delay(0);
+}
+
 // How long a completed trick's 4 cards stay fully visible before the table clears for the next
 // one — otherwise a trick-completing play and the reset to an empty table happen in the very same
 // state transition, and the human never actually sees what was won. Skipped entirely (both this
@@ -245,6 +262,13 @@ async function applyStepWithReveal(
     }
   }
   onStep(stepped.state, stepped.biddingIndex, stepped.state.currentTrick);
+  // This specific onStep (unlike the ones above) is never followed by a real delay when this play
+  // didn't complete a trick — the caller (autoPlay) goes straight into computing the *next*
+  // decision, which for "hard"/"expert" card play can be a long synchronous ISMCTS search. Without
+  // this yield, that card never gets its own paint: the browser only gets a chance to render once
+  // several decisions' worth of state changes have already piled up. See `yieldToBrowser`'s doc
+  // comment.
+  if (botDelayMs > 0) await yieldToBrowser();
   return stepped;
 }
 
