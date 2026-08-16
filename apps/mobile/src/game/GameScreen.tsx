@@ -23,37 +23,111 @@ import {
   typography,
   useTranslation,
 } from "ui-kit";
-import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, pendingDecision } from "./store";
+import { loadSoloSession, saveSoloSession, clearSoloSession, SoloGameSession } from "./persistence";
+import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, resumeGameStore, pendingDecision } from "./store";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 const HUMAN_SEAT: PlayerIndex = 0;
 
 export interface GameScreenProps {
   onExit: () => void;
+  /** True when entered via Home's dedicated "Resume Game" button — skips the resume-or-new
+   * prompt and goes straight into the saved game, since the user already explicitly said what
+   * they want. The normal Solo vs Computer entry point (the default, false) still asks whenever a
+   * session exists, so tapping it never silently discards progress in favor of a fresh deal. */
+  autoResume?: boolean;
 }
 
-/** Top-level Solo vs. Computer screen: waits for the player's saved Settings (game rules + card
- * back style) to load, then a tiny difficulty picker, then the live game. Settings are read here
- * rather than inside ActiveGame because the game store is created once on mount from whatever
- * ruleSet is passed in — reading settings after that point could never retroactively apply them. */
-export function GameScreen({ onExit }: GameScreenProps) {
-  const [difficulty, setDifficulty] = useState<Difficulty | null>(null);
-  const { loading, settings } = useSettings();
+type Stage =
+  | { kind: "checking" }
+  | { kind: "resumePrompt"; session: SoloGameSession }
+  | { kind: "resumed"; session: SoloGameSession }
+  | { kind: "difficultyPicker" }
+  | { kind: "active"; difficulty: Difficulty };
 
-  if (loading) {
+/** Top-level Solo vs. Computer screen: checks for a saved in-progress session, then either the
+ * resume-or-new prompt, straight into a resumed game, or the difficulty picker followed by a
+ * fresh one — then the live game either way. Settings are read here (not inside ActiveGame/
+ * ResumedGame) because the game store is created once on mount from whatever ruleSet is passed
+ * in — reading settings after that point could never retroactively apply them. */
+export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
+  const { loading, settings } = useSettings();
+  const [stage, setStage] = useState<Stage>({ kind: "checking" });
+
+  useEffect(() => {
+    loadSoloSession().then((session) => {
+      if (session === null) setStage({ kind: "difficultyPicker" });
+      else if (autoResume) setStage({ kind: "resumed", session });
+      else setStage({ kind: "resumePrompt", session });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (loading || stage.kind === "checking") {
     return <SafeAreaView style={styles.container} />;
   }
-  if (difficulty === null) {
-    return <DifficultyPicker onChoose={setDifficulty} onExit={onExit} />;
+
+  if (stage.kind === "resumePrompt") {
+    return (
+      <ResumePrompt
+        onResume={() => setStage({ kind: "resumed", session: stage.session })}
+        onStartNew={() => {
+          clearSoloSession();
+          setStage({ kind: "difficultyPicker" });
+        }}
+        onExit={onExit}
+      />
+    );
   }
+
+  if (stage.kind === "resumed") {
+    return (
+      <ResumedGame
+        session={stage.session}
+        cardBackStyle={settings.cardBackStyle}
+        saveHistoryEnabled={settings.saveHistoryEnabled}
+        onExit={onExit}
+      />
+    );
+  }
+
+  if (stage.kind === "difficultyPicker") {
+    return <DifficultyPicker onChoose={(difficulty) => setStage({ kind: "active", difficulty })} onExit={onExit} />;
+  }
+
   return (
     <ActiveGame
-      difficulty={difficulty}
+      difficulty={stage.difficulty}
       gameRules={settings.gameRules}
       cardBackStyle={settings.cardBackStyle}
       saveHistoryEnabled={settings.saveHistoryEnabled}
       onExit={onExit}
     />
+  );
+}
+
+function ResumePrompt({
+  onResume,
+  onStartNew,
+  onExit,
+}: {
+  onResume: () => void;
+  onStartNew: () => void;
+  onExit: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <Text style={styles.title}>{t("game:resume.title")}</Text>
+        <Text style={styles.toggleLabel}>{t("game:resume.body")}</Text>
+        <View style={styles.choiceButtons}>
+          <Button label={t("game:resume.resume")} onPress={onResume} />
+          <Button label={t("game:resume.startNew")} onPress={onStartNew} variant="secondary" />
+        </View>
+        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
+      </View>
+    </SafeAreaView>
   );
 }
 
@@ -66,6 +140,8 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
         <View style={styles.choiceButtons}>
           <Button label={t("game:difficulty.easy")} onPress={() => onChoose("easy")} />
           <Button label={t("game:difficulty.normal")} onPress={() => onChoose("normal")} />
+          <Button label={t("game:difficulty.hard")} onPress={() => onChoose("hard")} />
+          <Button label={t("game:difficulty.expert")} onPress={() => onChoose("expert")} />
         </View>
         <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
@@ -86,6 +162,7 @@ function turnMessage(
   return "";
 }
 
+/** Constructs a fresh game store and renders it — the normal "pick a difficulty and deal" path. */
 function ActiveGame({
   difficulty,
   gameRules,
@@ -99,11 +176,47 @@ function ActiveGame({
   saveHistoryEnabled: boolean;
   onExit: () => void;
 }) {
-  const { t } = useTranslation();
   const [store] = useState<GameStoreHook>(() =>
     createGameStore({ ruleSet: gameRules, humanSeat: HUMAN_SEAT, difficulty, firstDealer: 0 }),
   );
+  return <GameTable store={store} cardBackStyle={cardBackStyle} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />;
+}
+
+/** Constructs a store from a previously-saved in-progress session and renders it — the "resume"
+ * path, whether reached via Home's dedicated button or the resume-or-new prompt. */
+function ResumedGame({
+  session,
+  cardBackStyle,
+  saveHistoryEnabled,
+  onExit,
+}: {
+  session: SoloGameSession;
+  cardBackStyle: CardBackStyle;
+  saveHistoryEnabled: boolean;
+  onExit: () => void;
+}) {
+  const [store] = useState<GameStoreHook>(() => resumeGameStore(session));
+  return <GameTable store={store} cardBackStyle={cardBackStyle} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />;
+}
+
+/** The live table — reads everything from an already-constructed `store` (fresh or resumed, it
+ * doesn't know or care which) and persists the in-progress session on every change, clearing it
+ * once the game truly finishes, so navigating back to the menu mid-game never loses progress. */
+function GameTable({
+  store,
+  cardBackStyle,
+  saveHistoryEnabled,
+  onExit,
+}: {
+  store: GameStoreHook;
+  cardBackStyle: CardBackStyle;
+  saveHistoryEnabled: boolean;
+  onExit: () => void;
+}) {
+  const { t } = useTranslation();
   const game = store((s) => s.game);
+  const humanSeat = store((s) => s.humanSeat);
+  const difficulty = store((s) => s.difficulty);
   const biddingIndex = store((s) => s.biddingIndex);
   const displayTrick = store((s) => s.displayTrick);
   const playCard = store((s) => s.playCard);
@@ -117,6 +230,14 @@ function ActiveGame({
   // Local, not persisted — a per-session display preference, not game state. Defaults on: the
   // point is to make it discoverable, not to add a hunt-for-the-setting step.
   const [showLastTrick, setShowLastTrick] = useState(true);
+
+  useEffect(() => {
+    if (game.phase === "game-complete") {
+      clearSoloSession();
+    } else {
+      saveSoloSession({ game, humanSeat, difficulty, biddingIndex });
+    }
+  }, [game, humanSeat, difficulty, biddingIndex]);
 
   const decision = pendingDecision(game, biddingIndex);
   const seatLabels: Record<PlayerIndex, string> = {

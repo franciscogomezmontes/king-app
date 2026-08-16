@@ -9,7 +9,7 @@ import {
 } from "@expo-google-fonts/source-sans-3";
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import {
   I18nextProvider,
@@ -25,6 +25,7 @@ import {
   useTranslation,
 } from "ui-kit";
 import { GameScreen } from "./src/game/GameScreen";
+import { loadSoloSession } from "./src/game/persistence";
 import { HistoryScreen } from "./src/history/HistoryScreen";
 import { HowToPlayScreen } from "./src/howToPlay/HowToPlayScreen";
 import { initI18n } from "./src/i18n";
@@ -32,7 +33,7 @@ import { OnlineScreen } from "./src/online/OnlineScreen";
 import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
 import { SettingsScreen } from "./src/settings/SettingsScreen";
 
-type Screen = "menu" | "solo" | "scorekeeper" | "history" | "settings" | "online" | "howToPlay";
+type Screen = "menu" | "solo" | "soloResume" | "scorekeeper" | "history" | "settings" | "online" | "howToPlay";
 
 export default function App() {
   const [i18n] = useState(() => initI18n());
@@ -52,7 +53,9 @@ export default function App() {
   return (
     <I18nextProvider i18n={i18n}>
       <StatusBar style="light" />
-      {screen === "solo" && <GameScreen onExit={() => setScreen("menu")} />}
+      {(screen === "solo" || screen === "soloResume") && (
+        <GameScreen onExit={() => setScreen("menu")} autoResume={screen === "soloResume"} />
+      )}
       {screen === "online" && <OnlineScreen onExit={() => setScreen("menu")} />}
       {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
       {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
@@ -70,6 +73,14 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
   const { width } = useWindowDimensions();
   const isCompact = width < 380;
   const activeLocale = (i18n.resolvedLanguage ?? i18n.language).slice(0, 2);
+  // Re-checked on every mount — i.e. every time the player lands back on the menu, including right
+  // after a game finishes (which clears the session) or a fresh one starts (which doesn't exist to
+  // find until the first card is dealt) — so this never goes stale while the app stays open.
+  const [hasResumableSolo, setHasResumableSolo] = useState(false);
+
+  useEffect(() => {
+    loadSoloSession().then((session) => setHasResumableSolo(session !== null));
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,6 +93,14 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
         </View>
 
         <View style={styles.modeList}>
+          {hasResumableSolo && (
+            <Pressable onPress={() => onSelect("soloResume")}>
+              <Surface style={[styles.modeCard, styles.resumeCard]}>
+                <Text style={styles.modeLabel}>{t("app:modes.resumeSolo")}</Text>
+                <Text style={styles.modeHint}>{t("app:modes.resumeSoloHint")}</Text>
+              </Surface>
+            </Pressable>
+          )}
           <Pressable onPress={() => onSelect("scorekeeper")}>
             <Surface style={styles.modeCard}>
               <Text style={styles.modeLabel}>{t("app:modes.scorekeeper")}</Text>
@@ -181,6 +200,10 @@ const styles = StyleSheet.create({
   modeCard: {
     borderWidth: 1,
     borderColor: colors.goldMuted,
+  },
+  resumeCard: {
+    borderColor: colors.gold,
+    borderWidth: 2,
   },
   modeLabel: {
     fontFamily: fonts.displaySemi,

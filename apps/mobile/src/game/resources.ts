@@ -46,8 +46,16 @@ export const GAME_RESOURCES = {
         label: "Difficulty",
         easy: "Easy",
         normal: "Normal",
+        hard: "Hard",
+        expert: "Expert",
       },
       start: "Start Game",
+      resume: {
+        title: "Unfinished Game",
+        body: "You have a game in progress. Resume it, or start a new one instead?",
+        resume: "Resume Game",
+        startNew: "Start New Game",
+      },
       handComplete: {
         title: "Hand {{number}} Complete",
         continue: "Continue",
@@ -113,8 +121,16 @@ export const GAME_RESOURCES = {
         label: "Dificultad",
         easy: "Fácil",
         normal: "Normal",
+        hard: "Difícil",
+        expert: "Experto",
       },
       start: "Empezar Juego",
+      resume: {
+        title: "Partida sin Terminar",
+        body: "Tienes una partida en curso. ¿Quieres continuarla, o empezar una nueva?",
+        resume: "Continuar Partida",
+        startNew: "Empezar Partida Nueva",
+      },
       handComplete: {
         title: "Mano {{number}} Completa",
         continue: "Continuar",

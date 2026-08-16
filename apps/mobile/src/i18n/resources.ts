@@ -11,6 +11,8 @@ export const APP_RESOURCES = {
       tagline: "Club table",
       pitch: "King, the way it's always been played",
       modes: {
+        resumeSolo: "Resume Game",
+        resumeSoloHint: "Continue your unfinished Solo vs Computer game.",
         scorekeeper: "Scorekeeper",
         scorekeeperHint: "Keep score for a table with physical cards.",
         solo: "Solo vs Computer",
@@ -29,6 +31,8 @@ export const APP_RESOURCES = {
       tagline: "Mesa de club",
       pitch: "El King de toda la vida",
       modes: {
+        resumeSolo: "Continuar Partida",
+        resumeSoloHint: "Continúa tu partida de Solo vs Computadora sin terminar.",
         scorekeeper: "Anotador",
         scorekeeperHint: "Anota una mesa con cartas físicas.",
         solo: "Solo contra la computadora",

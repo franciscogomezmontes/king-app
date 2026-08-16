@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseBid, chooseCard, chooseDealerDecision, chooseTrumpDeclaration, shouldOpenAuction } from "ai-opponent";
-import { GameRules, GameState, PlayerIndex } from "rules-engine";
-import { createGameStore, Difficulty, pendingDecision } from "../src/game/store";
+import { applyAction, createDeck, createGame, DEFAULT_GAME_RULES, GameRules, GameState, PlayerIndex, shuffle } from "rules-engine";
+import { createGameStore, Difficulty, pendingDecision, resumeGameStore } from "../src/game/store";
 
 // Same small deterministic PRNG used throughout this repo's property/integration tests.
 function mulberry32(seed: number) {
@@ -22,24 +22,19 @@ function sum(scores: Record<PlayerIndex, number>): number {
 const HUMAN_SEAT: PlayerIndex = 0;
 
 /**
- * Drives a full game through the store's own public API (playCard/declareTrump/openAuction/
- * submitBid/passBid/dealerDecide) — the same calls GameScreen makes — with seats 1-3 auto-played
- * internally by the store (per `difficulty`) and seat 0 ("human" here) driven externally using
- * ai-opponent, so this exercises the store's orchestration itself, not just the engine beneath it.
+ * Drives an already-constructed store through to game-complete via its own public API
+ * (playCard/declareTrump/openAuction/submitBid/passBid/dealerDecide) — the same calls GameScreen
+ * makes — with seats 1-3 auto-played internally by the store and seat 0 ("human" here) driven
+ * externally using ai-opponent, so this exercises the store's orchestration itself, not just the
+ * engine beneath it. Shared by both a freshly-dealt store and one resumed from a saved session —
+ * from here on, driving either to completion looks identical, which is the point.
  *
  * The store paces bot decisions and trick-completion reveals with real delays for the live UI —
- * `botDelayMs: 0` disables all of that here so the test runs fast, and `waitForIdle()` is awaited
- * after every dispatch so state has fully settled (through any auto-played bot turns) before the
- * next iteration reads it.
+ * tests must pass `botDelayMs: 0` when constructing the store to disable all of that so this runs
+ * fast; `waitForIdle()` is awaited after every dispatch so state has fully settled (through any
+ * auto-played bot turns) before the next iteration reads it.
  */
-async function playFullGameViaStore(
-  ruleSet: GameRules,
-  difficulty: Difficulty,
-  firstDealer: PlayerIndex,
-  seed: number,
-): Promise<GameState> {
-  const random = mulberry32(seed);
-  const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty, firstDealer, random, botDelayMs: 0 });
+async function driveStoreToCompletion(store: ReturnType<typeof createGameStore>): Promise<GameState> {
   await store.getState().waitForIdle(); // settle the initial deal (+ any pre-human bot turns)
 
   const { playCard, declareTrump, openAuction, submitBid, passBid, dealerDecide, continueToNextHand, waitForIdle } =
@@ -83,6 +78,57 @@ async function playFullGameViaStore(
     await waitForIdle();
   }
 }
+
+async function playFullGameViaStore(
+  ruleSet: GameRules,
+  difficulty: Difficulty,
+  firstDealer: PlayerIndex,
+  seed: number,
+): Promise<GameState> {
+  const random = mulberry32(seed);
+  const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty, firstDealer, random, botDelayMs: 0 });
+  return driveStoreToCompletion(store);
+}
+
+describe("game store — resuming a saved session", () => {
+  it("restores the exact saved game state rather than dealing fresh", () => {
+    const random = mulberry32(5);
+    let game: GameState = createGame(DEFAULT_GAME_RULES, 0);
+    game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
+    // Play a few cards so the saved state is demonstrably mid-hand, not a fresh deal.
+    for (let i = 0; i < 3; i++) {
+      const player = game.currentTurn;
+      game = applyAction(game, { type: "PLAY_CARD", player, card: chooseCard(game, player) });
+    }
+    const savedHands = JSON.parse(JSON.stringify(game.hands));
+    const savedCurrentTrick = JSON.parse(JSON.stringify(game.currentTrick));
+
+    const store = resumeGameStore({ game, humanSeat: HUMAN_SEAT, difficulty: "easy", biddingIndex: 0 }, { botDelayMs: 0 });
+
+    // Read synchronously, right after construction — zustand's create() runs its initializer
+    // synchronously, so this is the state before any auto-play continuation has had a chance to
+    // run yet, proving it started from the saved session and not a fresh deal.
+    expect(store.getState().game.hands).toEqual(savedHands);
+    expect(store.getState().game.currentTrick).toEqual(savedCurrentTrick);
+    expect(store.getState().humanSeat).toBe(HUMAN_SEAT);
+    expect(store.getState().difficulty).toBe("easy");
+  });
+
+  it("a resumed game can still be driven all the way to game-complete", async () => {
+    const random = mulberry32(6);
+    let game: GameState = createGame(DEFAULT_GAME_RULES, 0);
+    game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
+
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", biddingIndex: 0 },
+      { random, botDelayMs: 0 },
+    );
+    const final = await driveStoreToCompletion(store);
+
+    expect(final.phase).toBe("game-complete");
+    expect(final.handHistory).toHaveLength(10);
+  });
+});
 
 describe("game store — trick-reveal pacing", () => {
   it("keeps showing a hand-ending trick's 4 cards (phase still \"playing\") before flipping to hand-complete", async () => {

@@ -17,7 +17,7 @@ import {
 import { currentBidder } from "./auctionOrder";
 import * as easyBot from "./easyBot";
 
-export type Difficulty = "easy" | "normal";
+export type Difficulty = "easy" | "normal" | "hard" | "expert";
 
 export interface TrumpChoice {
   trump: TrumpSuit;
@@ -38,18 +38,39 @@ interface Bot {
 }
 
 function makeBot(difficulty: Difficulty, random: RandomSource): Bot {
-  if (difficulty === "normal") return aiOpponent;
-  // "Easy" now routes card play through ai-opponent's own easy difficulty (today's plain
-  // heuristic plus some randomness — see chooseCard.ts) instead of a fully-random card pick, so
-  // the two difficulties are actually distinguishable in more than just bidding/trump/dealer
-  // choices. Those four decisions still use the simple always-random easyBot module, unchanged.
+  if (difficulty === "easy") {
+    // "Easy" routes card play through ai-opponent's own easy difficulty (today's plain heuristic
+    // plus some randomness — see chooseCard.ts) instead of a fully-random card pick, so the
+    // difficulties are actually distinguishable in more than just bidding/trump/dealer choices.
+    // Those four decisions still use the simple always-random easyBot module, unchanged.
+    return {
+      chooseCard: (s, p) => aiOpponent.chooseCard(s, p, "easy", random),
+      shouldOpenAuction: (s, p) => easyBot.shouldOpenAuction(s, p, random),
+      chooseTrumpDeclaration: (s, p) => easyBot.chooseTrumpDeclaration(s, p, random),
+      chooseBid: (s, p) => easyBot.chooseBid(s, p, random),
+      chooseDealerDecision: (s, p) => easyBot.chooseDealerDecision(s, p, random),
+    };
+  }
+  // "normal"/"hard"/"expert" all share ai-opponent's Tier 1 bidding/trump/dealer-decision logic —
+  // there's no search-based upgrade for those yet (see .claude/skills/king-ai-opponent), only for
+  // card play itself: "normal" gets Tier 1's tracking-aware heuristic, "hard"/"expert" get ISMCTS
+  // at their respective search budgets. `difficulty` flows straight through to ai-opponent's own
+  // chooseCard, which already knows what each of those three means.
   return {
-    chooseCard: (s, p) => aiOpponent.chooseCard(s, p, "easy", random),
-    shouldOpenAuction: (s, p) => easyBot.shouldOpenAuction(s, p, random),
-    chooseTrumpDeclaration: (s, p) => easyBot.chooseTrumpDeclaration(s, p, random),
-    chooseBid: (s, p) => easyBot.chooseBid(s, p, random),
-    chooseDealerDecision: (s, p) => easyBot.chooseDealerDecision(s, p, random),
+    chooseCard: (s, p) => aiOpponent.chooseCard(s, p, difficulty, random),
+    shouldOpenAuction: aiOpponent.shouldOpenAuction,
+    chooseTrumpDeclaration: aiOpponent.chooseTrumpDeclaration,
+    chooseBid: aiOpponent.chooseBid,
+    chooseDealerDecision: aiOpponent.chooseDealerDecision,
   };
+}
+
+/** "hard"/"expert" already spend real, visible computation time (up to a few hundred ms) choosing
+ * a card — layering the artificial "let it look like it's thinking" pre-move pause on top of that
+ * would make those difficulties noticeably slower to play against for no benefit. Only "easy"/
+ * "normal" (near-instant heuristics) need the artificial pause to not feel instantaneous/robotic. */
+function preDecisionDelayMs(difficulty: Difficulty, botDelayMs: number): number {
+  return difficulty === "hard" || difficulty === "expert" ? 0 : botDelayMs;
 }
 
 /** Whose decision is needed right now, and what kind — the UI reads this to know what to show. */
@@ -213,6 +234,7 @@ async function autoPlay(
   random: RandomSource,
   biddingIndex: number,
   botDelayMs: number,
+  preDelayMs: number,
   onStep: OnStep,
 ): Promise<void> {
   let current = state;
@@ -233,7 +255,7 @@ async function autoPlay(
     // human gets the equivalent choice as their own explicit button (see GameScreen), since
     // unlike a bot they might have a reason to keep a weak-looking hand.
     if (canRequestRedeal(current, decision.player)) {
-      if (botDelayMs > 0) await delay(botDelayMs);
+      if (preDelayMs > 0) await delay(preDelayMs);
       const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
       const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, onStep);
       current = stepped.state;
@@ -241,7 +263,7 @@ async function autoPlay(
       continue;
     }
 
-    if (botDelayMs > 0) await delay(botDelayMs);
+    if (preDelayMs > 0) await delay(preDelayMs);
     const stepped = await applyStepWithReveal(current, bi, botAction(current, decision, bot), botDelayMs, onStep);
     current = stepped.state;
     bi = stepped.biddingIndex;
@@ -288,15 +310,21 @@ export interface GameStore {
   waitForIdle: () => Promise<void>;
 }
 
-/**
- * Builds a fresh game store. One instance per game session — the caller creates a new one via
- * `useState(() => createGameStore(options))` when starting a game, the same pattern already used
- * for `initI18n()` in this app.
- */
-export function createGameStore(options: NewGameOptions): GameStoreHook {
-  const random = options.random ?? Math.random;
-  const botDelayMs = options.botDelayMs ?? DEFAULT_BOT_THINK_MS;
-  const bot = makeBot(options.difficulty, random);
+/** The minimum state needed to build (or rebuild) a store: either a brand-new game via
+ * `createGameStore`, or one resumed from a previously-saved in-progress session via
+ * `resumeGameStore` — both funnel through the same `buildStore` so the orchestration (dispatch,
+ * autoPlay kickoff, pacing) never has to know which one it's dealing with. Also exactly what
+ * `../game/persistence.ts` needs to save/restore a session. */
+export interface InitialGameState {
+  game: GameState;
+  humanSeat: PlayerIndex;
+  difficulty: Difficulty;
+  biddingIndex: number;
+}
+
+function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs: number): GameStoreHook {
+  const bot = makeBot(initial.difficulty, random);
+  const preDelayMs = preDecisionDelayMs(initial.difficulty, botDelayMs);
   let pending: Promise<void> = Promise.resolve();
 
   const store = create<GameStore>((set, get) => {
@@ -309,7 +337,7 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
       // No pre-delay for the human's own move — they already deliberated by tapping — but a
       // trick they complete still gets the same reveal pause as anyone else's.
       const afterHuman = await applyStepWithReveal(game, biddingIndex, result, botDelayMs, onStep);
-      await autoPlay(afterHuman.state, humanSeat, bot, random, afterHuman.biddingIndex, botDelayMs, onStep);
+      await autoPlay(afterHuman.state, humanSeat, bot, random, afterHuman.biddingIndex, botDelayMs, preDelayMs, onStep);
     }
 
     function dispatch(result: GameAction | "pass") {
@@ -317,11 +345,11 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     }
 
     return {
-      game: createGame(options.ruleSet, options.firstDealer),
-      humanSeat: options.humanSeat,
-      difficulty: options.difficulty,
-      biddingIndex: 0,
-      displayTrick: [],
+      game: initial.game,
+      humanSeat: initial.humanSeat,
+      difficulty: initial.difficulty,
+      biddingIndex: initial.biddingIndex,
+      displayTrick: initial.game.currentTrick,
       playCard: (card) => dispatch({ type: "PLAY_CARD", player: get().humanSeat, card }),
       declareTrump: (choice) =>
         dispatch({
@@ -342,18 +370,56 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     };
   });
 
-  // Kick off dealing (+ any bot decisions before the first human turn) right away.
+  // Kick off dealing (+ any bot decisions before the first human turn) right away — for a resumed
+  // game this just means "keep going if it happened to be a bot's turn," same code path either way.
   pending = autoPlay(
     store.getState().game,
-    options.humanSeat,
+    initial.humanSeat,
     bot,
     random,
-    0,
+    initial.biddingIndex,
     botDelayMs,
+    preDelayMs,
     (state, biddingIndex, displayTrick) => store.setState({ game: state, biddingIndex, displayTrick }),
   );
 
   return store;
+}
+
+/**
+ * Builds a fresh game store. One instance per game session — the caller creates a new one via
+ * `useState(() => createGameStore(options))` when starting a game, the same pattern already used
+ * for `initI18n()` in this app.
+ */
+export function createGameStore(options: NewGameOptions): GameStoreHook {
+  const random = options.random ?? Math.random;
+  const botDelayMs = options.botDelayMs ?? DEFAULT_BOT_THINK_MS;
+  const initial: InitialGameState = {
+    game: createGame(options.ruleSet, options.firstDealer),
+    humanSeat: options.humanSeat,
+    difficulty: options.difficulty,
+    biddingIndex: 0,
+  };
+  return buildStore(initial, random, botDelayMs);
+}
+
+export interface ResumeGameOptions {
+  /** Injectable for reproducible tests; defaults to Math.random for real play. */
+  random?: RandomSource;
+  /** See `NewGameOptions.botDelayMs`. */
+  botDelayMs?: number;
+}
+
+/**
+ * Rebuilds a game store from a previously-saved in-progress session (see
+ * `../game/persistence.ts`'s `loadSoloSession`) instead of dealing a fresh game — same
+ * `GameStoreHook` shape either way, so the rest of the app never needs to know a game was resumed
+ * rather than started.
+ */
+export function resumeGameStore(session: InitialGameState, options: ResumeGameOptions = {}): GameStoreHook {
+  const random = options.random ?? Math.random;
+  const botDelayMs = options.botDelayMs ?? DEFAULT_BOT_THINK_MS;
+  return buildStore(session, random, botDelayMs);
 }
 
 export type GameStoreHook = UseBoundStore<StoreApi<GameStore>>;
