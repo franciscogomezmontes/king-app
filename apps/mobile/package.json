@@ -26,7 +26,9 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-reanimated": "~4.1.7",
     "react-native-web": "~0.21.2",
+    "react-native-worklets": "0.5.1",
     "rules-engine": "workspace:*",
     "ui-kit": "workspace:*",
     "zustand": "^5.0.14"

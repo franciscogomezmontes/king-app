@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import type { Card, Rank } from "rules-engine";
 import { colors, fonts, radii } from "../theme";
 
@@ -36,12 +37,25 @@ export interface PlayingCardProps {
   onPress?: () => void;
   disabled?: boolean;
   highlighted?: boolean;
+  /** Extra style applied to the outer (shadow-casting) wrapper — for a caller that needs to
+   * position/rotate the whole card (e.g. Table.tsx's trick cluster) without reaching inside past
+   * the shadow layer, which would clip it. Rotation/translation belongs here, not on the inner
+   * card body, so the shadow rotates/moves along with the card instead of staying axis-aligned. */
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
  * Face-up card. In a fanned hand the overlapping neighbor hides most of the card, so `face="fan"`
  * draws only a large top-left index — the way a real fan is read. `face="table"` draws the full
  * pip layout in a padded well that does not collide with the corners.
+ *
+ * Rendered as two nested views, not one, specifically so the card can have both rounded corners
+ * *and* a real drop shadow: the inner view owns `overflow: "hidden"` (needed to clip pip content
+ * to the rounded card shape), and on iOS/web `shadow*` props are clipped by any ancestor with
+ * `overflow: "hidden"` — so the shadow has to live on an outer view that doesn't clip. Android's
+ * `elevation` doesn't have this restriction (its shadow is a compositor effect, not clipped by the
+ * view it's drawn on), but keeping both on the same outer wrapper is simpler than special-casing
+ * per platform and costs nothing.
  */
 export function PlayingCard({
   card,
@@ -49,6 +63,7 @@ export function PlayingCard({
   onPress,
   disabled = false,
   highlighted = false,
+  style,
 }: PlayingCardProps) {
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
@@ -57,31 +72,33 @@ export function PlayingCard({
   const dim = DIM[face];
 
   return (
-    <Pressable
-      onPress={interactive ? onPress : undefined}
-      disabled={!interactive}
-      style={[
-        styles.card,
-        { width: dim.width, height: dim.height },
-        highlighted && styles.cardHighlighted,
-        isKingHearts && face === "table" && styles.cardKingHearts,
-      ]}
-    >
-      <CornerIndex rank={card.rank} suit={card.suit} color={color} large={face === "fan"} />
-      {face === "table" && (
-        <>
-          <CornerIndex rank={card.rank} suit={card.suit} color={color} inverted />
-          {COURT_RANKS.has(card.rank) ? (
-            <CourtFace rank={card.rank} suit={card.suit} color={color} special={isKingHearts} />
-          ) : card.rank === 14 ? (
-            <AcePip suit={card.suit} color={color} special={isAceHearts} />
-          ) : (
-            <NumberPips rank={card.rank} suit={card.suit} color={color} />
-          )}
-        </>
-      )}
-      {disabled && <View style={styles.shadow} pointerEvents="none" />}
-    </Pressable>
+    <View style={[styles.shadowWrap, { width: dim.width, height: dim.height }, style]}>
+      <Pressable
+        onPress={interactive ? onPress : undefined}
+        disabled={!interactive}
+        style={[
+          styles.card,
+          { width: dim.width, height: dim.height },
+          highlighted && styles.cardHighlighted,
+          isKingHearts && face === "table" && styles.cardKingHearts,
+        ]}
+      >
+        <CornerIndex rank={card.rank} suit={card.suit} color={color} large={face === "fan"} />
+        {face === "table" && (
+          <>
+            <CornerIndex rank={card.rank} suit={card.suit} color={color} inverted />
+            {COURT_RANKS.has(card.rank) ? (
+              <CourtFace rank={card.rank} suit={card.suit} color={color} special={isKingHearts} />
+            ) : card.rank === 14 ? (
+              <AcePip suit={card.suit} color={color} special={isAceHearts} />
+            ) : (
+              <NumberPips rank={card.rank} suit={card.suit} color={color} />
+            )}
+          </>
+        )}
+        {disabled && <View style={styles.shadow} pointerEvents="none" />}
+      </Pressable>
+    </View>
   );
 }
 
@@ -187,6 +204,17 @@ function CourtFace({
 }
 
 const styles = StyleSheet.create({
+  // Depth layer — see the component doc comment for why this has to be a separate view from
+  // `card` rather than shadow props added directly to it. Values tuned for a card resting flat on
+  // felt: a soft, fairly tight shadow, not a dramatic floating-above-the-table look.
+  shadowWrap: {
+    borderRadius: radii.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 4,
+  },
   card: {
     borderRadius: radii.card,
     backgroundColor: colors.cream,

@@ -44,19 +44,36 @@ const CARD_ENTER_MS = 200;
 const CARD_EXIT_MS = 150;
 
 /**
+ * A fixed, small tilt + nudge per compass position — cards thrown down "casually," like a real
+ * hand of cards landing slightly askew, rather than perfectly grid-aligned. Deliberately subtle (a
+ * few degrees, a few px): each card stays fully inside its own slot with its corner index still
+ * completely readable — this is a per-card physicality cue, not a re-layout into an overlapping
+ * fan, which would hide corners and undo the "every card's index stays visible" property the
+ * compass-cross layout exists for (see the `Table` doc comment below).
+ */
+const TRICK_CARD_TILT: Record<SeatPosition, { rotate: string; translateX: number; translateY: number }> = {
+  top: { rotate: "-3deg", translateX: -2, translateY: 0 },
+  left: { rotate: "4deg", translateX: 0, translateY: -2 },
+  right: { rotate: "-4deg", translateX: 0, translateY: 2 },
+  bottom: { rotate: "3deg", translateX: 2, translateY: 0 },
+};
+
+/**
  * One trick-pile slot, animated. A card fades and scales in the instant it's newly played here,
  * and — since the parent only ever tells us "there's a card" or "there isn't" — fades out in
  * place once the trick clears, rather than vanishing in the same React commit the parent stops
  * passing one. `displayCard` intentionally lags one step behind the `card` prop for exactly the
  * `CARD_EXIT_MS` it takes to play that exit, so there's always something on screen to animate.
  * Skips the entrance animation on first mount (e.g. a resumed game reopening mid-trick) — only
- * actual card-to-card or card-to-empty transitions animate.
+ * actual card-to-card or card-to-empty transitions animate. `position`'s only job is picking this
+ * slot's fixed tilt (`TRICK_CARD_TILT`) — it never varies per card, only per compass slot.
  */
-function TrickSlot({ card }: { card: Card | null }) {
+function TrickSlot({ card, position }: { card: Card | null; position: SeatPosition }) {
   const [displayCard, setDisplayCard] = useState(card);
   const mounted = useRef(false);
   const opacity = useRef(new Animated.Value(card ? 1 : 0)).current;
   const scale = useRef(new Animated.Value(card ? 1 : 0.85)).current;
+  const tilt = TRICK_CARD_TILT[position];
 
   useEffect(() => {
     if (!mounted.current) {
@@ -86,7 +103,12 @@ function TrickSlot({ card }: { card: Card | null }) {
   return (
     <View style={styles.trickSlot}>
       {displayCard && (
-        <Animated.View style={{ opacity, transform: [{ scale }] }}>
+        <Animated.View
+          style={{
+            opacity,
+            transform: [{ scale }, { rotate: tilt.rotate }, { translateX: tilt.translateX }, { translateY: tilt.translateY }],
+          }}
+        >
           <PlayingCard card={displayCard} />
         </Animated.View>
       )}
@@ -100,8 +122,9 @@ function TrickSlot({ card }: { card: Card | null }) {
  * The current trick's cards collect at the center of the table, laid out in a small non-
  * overlapping plus/cross (one slot per compass direction) rather than stacked on top of each
  * other — every card's corner index stays fully visible at all times, including the first card
- * played, not just whichever one ends up on top of a pile. An empty trick is a quiet felt well,
- * not an em-dash.
+ * played, not just whichever one ends up on top of a pile. Each slot's card gets a small, fixed
+ * tilt (`TRICK_CARD_TILT`) so the cluster reads as cards actually thrown down, not a perfect grid.
+ * An empty trick is a quiet felt well, not an em-dash.
  */
 export function Table({
   humanSeat,
@@ -135,7 +158,7 @@ export function Table({
   }
 
   function renderTrickCard(position: SeatPosition) {
-    return <TrickSlot card={playAt.get(position) ?? null} />;
+    return <TrickSlot card={playAt.get(position) ?? null} position={position} />;
   }
 
   return (

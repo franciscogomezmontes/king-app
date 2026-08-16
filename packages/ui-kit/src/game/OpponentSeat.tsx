@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors, fonts, radii, spacing } from "../theme";
+import { colors, fonts, spacing } from "../theme";
+import { Avatar } from "./Avatar";
 import { CardBack, CardBackStyle } from "./CardBack";
-import { DealerBadge } from "./DealerBadge";
 import { TrickPile } from "./TrickPile";
 
 export interface OpponentSeatProps {
@@ -17,18 +17,17 @@ export interface OpponentSeatProps {
   cardBackStyle?: CardBackStyle;
 }
 
-/** An opponent's seat: name/position, remaining card count, and their face-down pile of tricks
- * won so far — highlighted on their turn, badged when they're the dealer. Their card for the
- * trick in progress shows in the table's center pile instead (see Table), not pinned to their seat. */
+/** An opponent's seat: identity (Avatar — name, turn-glow, dealer badge), remaining card count,
+ * and their face-down pile of tricks won so far. Their card for the trick in progress shows in
+ * the table's center pile instead (see Table), not pinned to their seat. */
 export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer, cardBackStyle }: OpponentSeatProps) {
   return (
-    <View style={[styles.container, isCurrentTurn && styles.active]}>
-      <Text style={[styles.label, isCurrentTurn && styles.labelActive]}>{label}</Text>
+    <View style={styles.container}>
+      <Avatar name={label} isActive={isCurrentTurn} isDealer={isDealer} size="sm" />
       <View style={styles.stack}>
         <CardBack variant={cardBackStyle} />
         <Text style={styles.count}>×{cardCount}</Text>
       </View>
-      {isDealer && <DealerBadge />}
       <TrickPile count={tricksWon} />
     </View>
   );
@@ -38,27 +37,12 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     padding: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  active: {
-    backgroundColor: colors.accent,
-    borderColor: colors.gold,
-  },
-  label: {
-    color: colors.cream,
-    fontFamily: fonts.bodySemi,
-    fontSize: 13,
-    marginBottom: 4,
-  },
-  labelActive: {
-    color: colors.gold,
   },
   stack: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginTop: 4,
   },
   count: {
     color: colors.secondaryText,

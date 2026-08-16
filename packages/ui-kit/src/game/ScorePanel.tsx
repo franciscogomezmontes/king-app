@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from "react-native";
 import type { HandType, PlayerIndex } from "rules-engine";
 import { useTranslation } from "../i18n";
 import { colors, fonts, spacing } from "../theme";
+import { ScoreProgress } from "./ScoreProgress";
 
 export interface ScorePanelProps {
   handType: HandType;
@@ -11,7 +12,8 @@ export interface ScorePanelProps {
   seatLabels: Record<PlayerIndex, string>;
 }
 
-/** Current hand name (via ui-kit's own "rules" i18n namespace) plus every player's running score. */
+/** Current hand name (via ui-kit's own "rules" i18n namespace) plus every player's running score,
+ * as progress bars (see ScoreProgress) rather than bare numbers. */
 export function ScorePanel({ handType, handNumber, scores, seatLabels }: ScorePanelProps) {
   const { t } = useTranslation();
   const handName =
@@ -19,16 +21,10 @@ export function ScorePanel({ handType, handNumber, scores, seatLabels }: ScorePa
 
   return (
     <View style={styles.container}>
-      <Text style={styles.handName}>
-        {handNumber}/10 — {handName}
-      </Text>
-      <View style={styles.scores}>
-        {([0, 1, 2, 3] as PlayerIndex[]).map((player) => (
-          <Text key={player} style={styles.score}>
-            {seatLabels[player]}: {scores[player]}
-          </Text>
-        ))}
-      </View>
+      {/* The hand *number* now lives in ScoreProgress's own progress bar below, so this only
+          names the hand type — showing "3/10" in two places on the same panel read as a bug. */}
+      <Text style={styles.handName}>{handName}</Text>
+      <ScoreProgress handNumber={handNumber} scores={scores} seatLabels={seatLabels} />
     </View>
   );
 }
@@ -43,14 +39,5 @@ const styles = StyleSheet.create({
     fontFamily: fonts.displaySemi,
     fontSize: 16,
     marginBottom: 4,
-  },
-  scores: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  score: {
-    color: colors.secondaryText,
-    fontFamily: fonts.body,
-    fontSize: 13,
   },
 });
