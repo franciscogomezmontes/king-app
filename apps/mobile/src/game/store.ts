@@ -65,12 +65,24 @@ function makeBot(difficulty: Difficulty, random: RandomSource): Bot {
   };
 }
 
-/** "hard"/"expert" already spend real, visible computation time (up to a few hundred ms) choosing
- * a card — layering the artificial "let it look like it's thinking" pre-move pause on top of that
- * would make those difficulties noticeably slower to play against for no benefit. Only "easy"/
- * "normal" (near-instant heuristics) need the artificial pause to not feel instantaneous/robotic. */
-function preDecisionDelayMs(difficulty: Difficulty, botDelayMs: number): number {
-  return difficulty === "hard" || difficulty === "expert" ? 0 : botDelayMs;
+/**
+ * Runs `compute` and tops the elapsed time up to `minMs` before resolving — never adds delay on
+ * top of a `compute` that already took at least that long. This is what makes bot pacing feel
+ * consistent across every difficulty: "easy"/"normal"'s heuristic is near-instant, so this is
+ * almost the whole pause; "hard"/"expert"'s ISMCTS search genuinely can take a while, but only
+ * when there are 2+ legal cards to weigh — a forced single-legal-card play resolves in ~0ms
+ * (`ismctsChooseCard`'s own early return) exactly as often as any other difficulty, and without
+ * this top-up those moments would flash by with no pause at all while other moves from the same
+ * bot visibly "think" for hundreds of ms — the jarring inconsistency that reads as broken
+ * animations, not a difficulty-appropriate pace. Padding on top of Expert's 900ms budget, which
+ * already exceeds any reasonable floor, is correctly a no-op.
+ */
+async function pacedDecision<T>(minMs: number, compute: () => T): Promise<T> {
+  const start = Date.now();
+  const result = compute();
+  const elapsed = Date.now() - start;
+  if (minMs > 0 && elapsed < minMs) await delay(minMs - elapsed);
+  return result;
 }
 
 /** Whose decision is needed right now, and what kind — the UI reads this to know what to show. */
@@ -234,7 +246,6 @@ async function autoPlay(
   random: RandomSource,
   biddingIndex: number,
   botDelayMs: number,
-  preDelayMs: number,
   onStep: OnStep,
 ): Promise<void> {
   let current = state;
@@ -255,16 +266,16 @@ async function autoPlay(
     // human gets the equivalent choice as their own explicit button (see GameScreen), since
     // unlike a bot they might have a reason to keep a weak-looking hand.
     if (canRequestRedeal(current, decision.player)) {
-      if (preDelayMs > 0) await delay(preDelayMs);
       const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
+      await pacedDecision(botDelayMs, () => redeal);
       const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, onStep);
       current = stepped.state;
       bi = stepped.biddingIndex;
       continue;
     }
 
-    if (preDelayMs > 0) await delay(preDelayMs);
-    const stepped = await applyStepWithReveal(current, bi, botAction(current, decision, bot), botDelayMs, onStep);
+    const action = await pacedDecision(botDelayMs, () => botAction(current, decision, bot));
+    const stepped = await applyStepWithReveal(current, bi, action, botDelayMs, onStep);
     current = stepped.state;
     bi = stepped.biddingIndex;
   }
@@ -324,7 +335,6 @@ export interface InitialGameState {
 
 function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs: number): GameStoreHook {
   const bot = makeBot(initial.difficulty, random);
-  const preDelayMs = preDecisionDelayMs(initial.difficulty, botDelayMs);
   let pending: Promise<void> = Promise.resolve();
 
   const store = create<GameStore>((set, get) => {
@@ -337,7 +347,7 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
       // No pre-delay for the human's own move — they already deliberated by tapping — but a
       // trick they complete still gets the same reveal pause as anyone else's.
       const afterHuman = await applyStepWithReveal(game, biddingIndex, result, botDelayMs, onStep);
-      await autoPlay(afterHuman.state, humanSeat, bot, random, afterHuman.biddingIndex, botDelayMs, preDelayMs, onStep);
+      await autoPlay(afterHuman.state, humanSeat, bot, random, afterHuman.biddingIndex, botDelayMs, onStep);
     }
 
     function dispatch(result: GameAction | "pass") {
@@ -379,7 +389,6 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
     random,
     initial.biddingIndex,
     botDelayMs,
-    preDelayMs,
     (state, biddingIndex, displayTrick) => store.setState({ game: state, biddingIndex, displayTrick }),
   );
 
