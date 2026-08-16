@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import type { Card, PlayerIndex } from "rules-engine";
 import { colors, fonts, radii, spacing } from "../theme";
 import { CardBackStyle } from "./CardBack";
@@ -28,6 +29,69 @@ export interface TableProps {
   /** The player's Settings choice for opponents' face-down card backs. Defaults to CardBack's own
    * default ("lattice") when omitted. */
   cardBackStyle?: CardBackStyle;
+}
+
+function cardKey(card: Card): string {
+  return `${card.suit}${card.rank}`;
+}
+
+// How long a card takes to fade+scale into a trick slot, and to fade out again once the trick
+// clears — deliberately quick (a beat of motion, not a lingering effect) but never zero: a real
+// duration is what turns "the card teleported into place" into "the card was just played," which
+// is the whole gap between a table that feels alive and one that reads as a slideshow of static
+// frames no matter how well-paced the pauses between those frames are.
+const CARD_ENTER_MS = 200;
+const CARD_EXIT_MS = 150;
+
+/**
+ * One trick-pile slot, animated. A card fades and scales in the instant it's newly played here,
+ * and — since the parent only ever tells us "there's a card" or "there isn't" — fades out in
+ * place once the trick clears, rather than vanishing in the same React commit the parent stops
+ * passing one. `displayCard` intentionally lags one step behind the `card` prop for exactly the
+ * `CARD_EXIT_MS` it takes to play that exit, so there's always something on screen to animate.
+ * Skips the entrance animation on first mount (e.g. a resumed game reopening mid-trick) — only
+ * actual card-to-card or card-to-empty transitions animate.
+ */
+function TrickSlot({ card }: { card: Card | null }) {
+  const [displayCard, setDisplayCard] = useState(card);
+  const mounted = useRef(false);
+  const opacity = useRef(new Animated.Value(card ? 1 : 0)).current;
+  const scale = useRef(new Animated.Value(card ? 1 : 0.85)).current;
+
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (card) {
+      setDisplayCard(card);
+      opacity.setValue(0);
+      scale.setValue(0.85);
+      Animated.parallel([
+        Animated.timing(opacity, { toValue: 1, duration: CARD_ENTER_MS, useNativeDriver: true }),
+        Animated.timing(scale, { toValue: 1, duration: CARD_ENTER_MS, useNativeDriver: true }),
+      ]).start();
+    } else {
+      Animated.timing(opacity, { toValue: 0, duration: CARD_EXIT_MS, useNativeDriver: true }).start(
+        ({ finished }) => {
+          if (finished) setDisplayCard(null);
+        },
+      );
+    }
+    // Only the card's identity (suit+rank, or absence) should re-trigger this — not `displayCard`,
+    // which this effect itself updates (that would either loop or skip the exit animation).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card ? cardKey(card) : null]);
+
+  return (
+    <View style={styles.trickSlot}>
+      {displayCard && (
+        <Animated.View style={{ opacity, transform: [{ scale }] }}>
+          <PlayingCard card={displayCard} />
+        </Animated.View>
+      )}
+    </View>
+  );
 }
 
 /**
@@ -71,8 +135,7 @@ export function Table({
   }
 
   function renderTrickCard(position: SeatPosition) {
-    const playedCard = playAt.get(position);
-    return <View style={styles.trickSlot}>{playedCard && <PlayingCard card={playedCard} />}</View>;
+    return <TrickSlot card={playAt.get(position) ?? null} />;
   }
 
   return (

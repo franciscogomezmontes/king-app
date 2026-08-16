@@ -192,6 +192,15 @@ const TRICK_REVEAL_MS = 1100;
 // clearing the table for another trick, it's the moment right before the screen jumps straight to
 // the hand-complete scoreboard, so a mid-hand-length pause reads as "everything just vanished."
 const HAND_COMPLETE_REVEAL_MS = 2600;
+// A mid-hand trick clear stays on the Table component, so its 4 cards get a real fade-out
+// (Table.tsx's TrickSlot, CARD_EXIT_MS) for free just by the screen not changing underneath them.
+// The hand's *last* trick doesn't get that for free — GameScreen swaps straight from the Table to
+// a whole different scoreboard component the instant the real "hand-complete" phase reaches it,
+// which would unmount every TrickSlot mid-animation, undoing the fade-out this same trick would
+// otherwise get. This is the buffer that keeps the table mounted (still reporting "playing," the
+// same trick already used for HAND_COMPLETE_REVEAL_MS) just long enough for that exit-fade to
+// actually finish playing before the real phase — and the scoreboard swap — reaches the UI.
+const HAND_COMPLETE_TRICK_CLEAR_MS = 220;
 const DEFAULT_BOT_THINK_MS = 550;
 
 type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTrick) => void;
@@ -214,18 +223,25 @@ async function applyStepWithReveal(
 
   if (stepped.state.completedTricks.length > tricksBefore) {
     const justCompleted = stepped.state.completedTricks[stepped.state.completedTricks.length - 1];
+    const endsHand = stepped.state.phase === "hand-complete";
     // A trick that ends the hand flips `phase` to "hand-complete" in the very same step that
     // completes it — reporting that real phase here would switch the screen straight to the
     // scoreboard before the delay below even starts, so the human never actually sees the last
     // trick land. Report the phase as it was *before* this play instead (always "playing" — only
     // PLAY_CARD can complete a trick, and only phase "playing" allows one) so the table keeps
     // rendering normally, showing `justCompleted` as the current trick, for the full reveal pause.
-    // The real `stepped.state` (with its real phase) only reaches the UI in the call below, once
-    // that pause has elapsed.
+    // The real `stepped.state` (with its real phase) only reaches the UI once that pause — and,
+    // if this trick ends the hand, the extra HAND_COMPLETE_TRICK_CLEAR_MS buffer below — elapses.
     onStep({ ...stepped.state, phase: current.phase }, stepped.biddingIndex, justCompleted.plays);
     if (botDelayMs > 0) {
-      const revealMs = stepped.state.phase === "hand-complete" ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS;
-      await delay(revealMs);
+      await delay(endsHand ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS);
+      if (endsHand) {
+        // Clear the table — still reporting "playing," so it stays mounted — and give the exit-
+        // fade (Table.tsx's TrickSlot) time to actually play before the next call below reports
+        // the real "hand-complete" phase and the screen swaps to the scoreboard entirely.
+        onStep({ ...stepped.state, phase: current.phase }, stepped.biddingIndex, stepped.state.currentTrick);
+        await delay(HAND_COMPLETE_TRICK_CLEAR_MS);
+      }
     }
   }
   onStep(stepped.state, stepped.biddingIndex, stepped.state.currentTrick);
