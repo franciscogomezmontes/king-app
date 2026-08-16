@@ -177,7 +177,15 @@ async function applyStepWithReveal(
 
   if (stepped.state.completedTricks.length > tricksBefore) {
     const justCompleted = stepped.state.completedTricks[stepped.state.completedTricks.length - 1];
-    onStep(stepped.state, stepped.biddingIndex, justCompleted.plays);
+    // A trick that ends the hand flips `phase` to "hand-complete" in the very same step that
+    // completes it — reporting that real phase here would switch the screen straight to the
+    // scoreboard before the delay below even starts, so the human never actually sees the last
+    // trick land. Report the phase as it was *before* this play instead (always "playing" — only
+    // PLAY_CARD can complete a trick, and only phase "playing" allows one) so the table keeps
+    // rendering normally, showing `justCompleted` as the current trick, for the full reveal pause.
+    // The real `stepped.state` (with its real phase) only reaches the UI in the call below, once
+    // that pause has elapsed.
+    onStep({ ...stepped.state, phase: current.phase }, stepped.biddingIndex, justCompleted.plays);
     if (botDelayMs > 0) {
       const revealMs = stepped.state.phase === "hand-complete" ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS;
       await delay(revealMs);

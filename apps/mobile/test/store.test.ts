@@ -84,6 +84,56 @@ async function playFullGameViaStore(
   }
 }
 
+describe("game store — trick-reveal pacing", () => {
+  it("keeps showing a hand-ending trick's 4 cards (phase still \"playing\") before flipping to hand-complete", async () => {
+    const ruleSet: GameRules = {
+      mandatoryKilling: false,
+      auctionMustSell: false,
+      playingDownEnabled: false,
+      backwardsEnabled: false,
+      noFaceCardsRedealEnabled: false,
+    };
+    const random = mulberry32(11);
+    // botDelayMs: 0 skips the real pause (irrelevant to this test) but still reports the
+    // intermediate "reveal" state as its own separate store update — this is regression coverage
+    // for the store correctly deferring the phase flip until after that update, not for the pause
+    // actually lasting any particular duration.
+    const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty: "normal", firstDealer: 0, random, botDelayMs: 0 });
+    await store.getState().waitForIdle();
+
+    const snapshots: { phase: GameState["phase"]; displayTrickLength: number }[] = [];
+    const unsubscribe = store.subscribe((state) => {
+      snapshots.push({ phase: state.game.phase, displayTrickLength: state.displayTrick.length });
+    });
+
+    // Hand 1 is always a negative hand (fixed order), so every decision here is just "play" — play
+    // through its 13 tricks until the hand completes.
+    for (;;) {
+      const { game, biddingIndex } = store.getState();
+      const decision = pendingDecision(game, biddingIndex);
+      if (decision.kind === "advance") break;
+      if (decision.kind !== "play" || decision.player !== HUMAN_SEAT) {
+        throw new Error(`unexpected decision during a negative hand: ${JSON.stringify(decision)}`);
+      }
+      store.getState().playCard(chooseCard(game, decision.player));
+      await store.getState().waitForIdle();
+    }
+    unsubscribe();
+
+    // The reveal update specifically for the hand's LAST trick: all 4 cards showing, immediately
+    // followed by the update that actually flips to hand-complete. Every earlier (mid-hand) trick
+    // also gets a 4-card reveal update, so this must specifically find the one right before the
+    // hand-complete transition, not just the first reveal in the whole hand.
+    const revealIndex = snapshots.findIndex(
+      (s, i) => s.displayTrickLength === 4 && s.phase !== "hand-complete" && snapshots[i + 1]?.phase === "hand-complete",
+    );
+    expect(revealIndex).toBeGreaterThanOrEqual(0);
+    // The bug this guards against: that reveal update instead already reporting "hand-complete",
+    // which skips straight past the live table to the scoreboard in the same instant.
+    expect(snapshots[revealIndex].phase).toBe("playing");
+  });
+});
+
 describe("game store — full games via the public API", () => {
   const ruleSetCombos: GameRules[] = [
     {
