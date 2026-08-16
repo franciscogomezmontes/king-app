@@ -183,23 +183,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * A zero-length but *real* macrotask yield (a `setTimeout`, not just an `await`ed already-resolved
- * promise, which only yields a microtask and never lets the browser paint) — the standard way to
- * let a just-applied state update actually reach the screen before the JS thread picks up its next
- * chunk of synchronous work. Critical specifically for "hard"/"expert": ISMCTS's search (ismcts.ts)
- * is one long synchronous call with no yield points inside it (see .claude/skills/king-ai-opponent's
- * "Performance" section — this is a known, deliberate trade-off, not a bug in the search itself).
- * Without a real yield *between* each bot's decision, several decisions in a row can run back-to-
- * back with no paint in between (every `await` in between them resolves immediately, since the
- * decision already took longer than `botDelayMs`, so `pacedDecision` adds no padding) — the human
- * sees every card in the trick pop in at once, well after tapping their own, instead of one at a
- * time with each one's fade-in actually visible.
- */
-function yieldToBrowser(): Promise<void> {
-  return delay(0);
-}
-
 // How long a completed trick's 4 cards stay fully visible before the table clears for the next
 // one — otherwise a trick-completing play and the reset to an empty table happen in the very same
 // state transition, and the human never actually sees what was won. Skipped entirely (both this
@@ -219,6 +202,16 @@ const HAND_COMPLETE_REVEAL_MS = 2600;
 // actually finish playing before the real phase — and the scoreboard swap — reaches the UI.
 const HAND_COMPLETE_TRICK_CLEAR_MS = 220;
 const DEFAULT_BOT_THINK_MS = 550;
+// A just-played card's entrance animation (Table.tsx's TrickSlot, CARD_ENTER_MS=200ms) needs real,
+// JS-thread-free wall-clock time to actually finish. Every difficulty except "expert" already gets
+// this for free from pacedDecision's own pre-padding (its compute time is always under
+// DEFAULT_BOT_THINK_MS, so a real setTimeout-based pause follows, during which the browser is
+// completely free to run the animation) — "expert"'s 900ms ISMCTS budget always exceeds that
+// floor, so pacedDecision pads nothing, and the very next bot's decision (same search, same 900ms
+// synchronous block) would otherwise freeze this card's fade mid-flight for the whole block and
+// "snap" it to fully visible the instant that block ends — reading as exactly the lag-then-sudden-
+// jump this constant exists to prevent. A little over CARD_ENTER_MS for a small safety margin.
+const CARD_ANIMATION_SETTLE_MS = 220;
 
 type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTrick) => void;
 
@@ -226,13 +219,15 @@ type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTric
  * Applies one action (or a bid "pass") and reports it to `onStep` — pausing first to reveal the
  * completed trick's 4 cards if this play just finished one, so "the table clears itself" never
  * happens in the same instant as "the last card lands." Shared by the human's own moves and every
- * bot decision, so both get identical pacing/visibility.
+ * bot decision, so both get identical pacing/visibility. `difficulty` only affects one thing: see
+ * `CARD_ANIMATION_SETTLE_MS`.
  */
 async function applyStepWithReveal(
   current: GameState,
   biddingIndex: number,
   result: GameAction | "pass",
   botDelayMs: number,
+  difficulty: Difficulty,
   onStep: OnStep,
 ): Promise<{ state: GameState; biddingIndex: number }> {
   const tricksBefore = current.completedTricks.length;
@@ -264,11 +259,13 @@ async function applyStepWithReveal(
   onStep(stepped.state, stepped.biddingIndex, stepped.state.currentTrick);
   // This specific onStep (unlike the ones above) is never followed by a real delay when this play
   // didn't complete a trick — the caller (autoPlay) goes straight into computing the *next*
-  // decision, which for "hard"/"expert" card play can be a long synchronous ISMCTS search. Without
-  // this yield, that card never gets its own paint: the browser only gets a chance to render once
-  // several decisions' worth of state changes have already piled up. See `yieldToBrowser`'s doc
-  // comment.
-  if (botDelayMs > 0) await yieldToBrowser();
+  // decision. See CARD_ANIMATION_SETTLE_MS: only "expert" card plays need the full settle window;
+  // everything else gets a trivial yield (still a real setTimeout, not just an already-resolved
+  // awaited promise, which would never let the browser paint at all).
+  if (botDelayMs > 0) {
+    const needsSettle = difficulty === "expert" && result !== "pass" && result.type === "PLAY_CARD";
+    await delay(needsSettle ? CARD_ANIMATION_SETTLE_MS : 0);
+  }
   return stepped;
 }
 
@@ -283,6 +280,7 @@ async function autoPlay(
   state: GameState,
   humanSeat: PlayerIndex,
   bot: Bot,
+  difficulty: Difficulty,
   random: RandomSource,
   biddingIndex: number,
   botDelayMs: number,
@@ -308,14 +306,14 @@ async function autoPlay(
     if (canRequestRedeal(current, decision.player)) {
       const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
       await pacedDecision(botDelayMs, () => redeal);
-      const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, onStep);
+      const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, difficulty, onStep);
       current = stepped.state;
       bi = stepped.biddingIndex;
       continue;
     }
 
     const action = await pacedDecision(botDelayMs, () => botAction(current, decision, bot));
-    const stepped = await applyStepWithReveal(current, bi, action, botDelayMs, onStep);
+    const stepped = await applyStepWithReveal(current, bi, action, botDelayMs, difficulty, onStep);
     current = stepped.state;
     bi = stepped.biddingIndex;
   }
@@ -386,8 +384,8 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
       const { game, biddingIndex, humanSeat } = get();
       // No pre-delay for the human's own move — they already deliberated by tapping — but a
       // trick they complete still gets the same reveal pause as anyone else's.
-      const afterHuman = await applyStepWithReveal(game, biddingIndex, result, botDelayMs, onStep);
-      await autoPlay(afterHuman.state, humanSeat, bot, random, afterHuman.biddingIndex, botDelayMs, onStep);
+      const afterHuman = await applyStepWithReveal(game, biddingIndex, result, botDelayMs, initial.difficulty, onStep);
+      await autoPlay(afterHuman.state, humanSeat, bot, initial.difficulty, random, afterHuman.biddingIndex, botDelayMs, onStep);
     }
 
     function dispatch(result: GameAction | "pass") {
@@ -426,6 +424,7 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
     store.getState().game,
     initial.humanSeat,
     bot,
+    initial.difficulty,
     random,
     initial.biddingIndex,
     botDelayMs,
