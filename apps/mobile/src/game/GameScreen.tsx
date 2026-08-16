@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { canRequestRedeal, GameRules, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
@@ -61,8 +61,10 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <Text style={styles.title}>{t("game:difficulty.label")}</Text>
-        <Button label={t("game:difficulty.easy")} onPress={() => onChoose("easy")} />
-        <Button label={t("game:difficulty.normal")} onPress={() => onChoose("normal")} />
+        <View style={styles.choiceButtons}>
+          <Button label={t("game:difficulty.easy")} onPress={() => onChoose("easy")} />
+          <Button label={t("game:difficulty.normal")} onPress={() => onChoose("normal")} />
+        </View>
         <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
     </SafeAreaView>
@@ -152,11 +154,15 @@ function ActiveGame({
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
           <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
-          <Pressable onPress={() => setShowLastTrick((v) => !v)}>
-            <Text style={styles.headerToggle}>
-              {t("game:lastTrick.toggle")}: {showLastTrick ? "✓" : "✗"}
-            </Text>
-          </Pressable>
+          <View style={styles.lastTrickToggle}>
+            <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
+            <Switch
+              value={showLastTrick}
+              onValueChange={setShowLastTrick}
+              trackColor={{ false: colors.muted, true: colors.gold }}
+              thumbColor={colors.cream}
+            />
+          </View>
         </View>
         <ScorePanel
           handType={game.handType}
@@ -421,6 +427,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     alignSelf: "flex-start",
   },
+  lastTrickToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   headerToggle: {
     color: colors.secondaryText,
     fontFamily: fonts.body,
@@ -429,6 +440,11 @@ const styles = StyleSheet.create({
   title: {
     ...typography.displayMd,
     marginBottom: spacing.lg,
+  },
+  choiceButtons: {
+    width: "100%",
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   winnerText: {
     fontFamily: fonts.bodyBold,

@@ -117,8 +117,10 @@ function Lobby({
 
         {step === "choice" && (
           <>
-            <Button label={t("online:modeChoice.host")} onPress={() => setStep("create")} />
-            <Button label={t("online:modeChoice.join")} onPress={() => setStep("join")} />
+            <View style={styles.choiceButtons}>
+              <Button label={t("online:modeChoice.host")} onPress={() => setStep("create")} />
+              <Button label={t("online:modeChoice.join")} onPress={() => setStep("join")} />
+            </View>
             <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
           </>
         )}
@@ -139,7 +141,7 @@ function Lobby({
                   <Switch
                     value={gameRules[key]}
                     onValueChange={(value) => setGameRules((prev) => ({ ...prev, [key]: value }))}
-                    trackColor={{ false: colors.surface, true: colors.gold }}
+                    trackColor={{ false: colors.muted, true: colors.gold }}
                     thumbColor={colors.cream}
                   />
                 </Surface>
@@ -339,11 +341,15 @@ function ActiveOnlineGame({
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
           <Button label={t("online:leaveRoom")} onPress={exit} variant="ghost" style={styles.headerLink} />
-          <Pressable onPress={() => setShowLastTrick((v) => !v)}>
-            <Text style={styles.headerToggle}>
-              {t("game:lastTrick.toggle")}: {showLastTrick ? "✓" : "✗"}
-            </Text>
-          </Pressable>
+          <View style={styles.lastTrickToggle}>
+            <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
+            <Switch
+              value={showLastTrick}
+              onValueChange={setShowLastTrick}
+              trackColor={{ false: colors.muted, true: colors.gold }}
+              thumbColor={colors.cream}
+            />
+          </View>
         </View>
 
         {disconnectedSeats.length > 0 && (
@@ -606,6 +612,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     alignSelf: "flex-start",
   },
+  lastTrickToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
   headerToggle: {
     color: colors.secondaryText,
     fontFamily: fonts.body,
@@ -614,6 +625,11 @@ const styles = StyleSheet.create({
   title: {
     ...typography.displayMd,
     marginBottom: spacing.lg,
+  },
+  choiceButtons: {
+    width: "100%",
+    gap: spacing.md,
+    marginBottom: spacing.md,
   },
   winnerText: {
     fontFamily: fonts.bodyBold,

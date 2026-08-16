@@ -10,7 +10,7 @@ const COURT_RANKS = new Set<Rank>([11, 12, 13]);
 export type CardFace = "fan" | "table";
 
 const DIM = {
-  fan: { width: 42, height: 64 },
+  fan: { width: 48, height: 78 },
   table: { width: 72, height: 104 },
 } as const;
 
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   cornerLarge: {
-    width: 24,
+    width: 28,
   },
   cornerTop: {
     top: 3,
@@ -227,8 +227,8 @@ const styles = StyleSheet.create({
   },
   rankFan: {
     fontFamily: fonts.bodyBold,
-    fontSize: 18,
-    lineHeight: 20,
+    fontSize: 21,
+    lineHeight: 23,
     includeFontPadding: false,
   },
   rankTen: {
@@ -242,8 +242,8 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   suitFan: {
-    fontSize: 15,
-    lineHeight: 16,
+    fontSize: 17,
+    lineHeight: 18,
     includeFontPadding: false,
   },
   pipWell: {

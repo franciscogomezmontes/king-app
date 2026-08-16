@@ -79,7 +79,7 @@ export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
               <Switch
                 value={settings.gameRules[key]}
                 onValueChange={(value) => setGameRule(key, value)}
-                trackColor={{ false: colors.surface, true: colors.gold }}
+                trackColor={{ false: colors.muted, true: colors.gold }}
                 thumbColor={colors.cream}
               />
             </Surface>
@@ -96,7 +96,7 @@ export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
           <Switch
             value={settings.saveHistoryEnabled}
             onValueChange={setSaveHistoryEnabled}
-            trackColor={{ false: colors.surface, true: colors.gold }}
+            trackColor={{ false: colors.muted, true: colors.gold }}
             thumbColor={colors.cream}
           />
         </Surface>

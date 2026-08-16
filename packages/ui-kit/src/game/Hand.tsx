@@ -16,10 +16,12 @@ function sortForDisplay(cards: Card[]): Card[] {
 }
 
 // Fan cards are index-only, so the sliver only has to fit a large rank+suit, not a full pip face.
-// 42 + 12×24 = 330, which fits a 360px phone with 16px padding.
+// At a full 13-card hand, evenSpread = (330-48)/12 = 23.5px/card, for a ~330px total row — still
+// fits a 360px phone with 16px padding (328px available, ~2px over is imperceptible). Cards are
+// bigger than before (was 42px wide); MIN_VISIBLE_SLIVER only matters below ~13 cards.
 const TARGET_ROW_WIDTH = 330;
-const MIN_VISIBLE_SLIVER = 24;
-const LIFT_OFFSET = 12;
+const MIN_VISIBLE_SLIVER = 23;
+const LIFT_OFFSET = 16;
 
 function visibleSliverWidth(cardCount: number): number {
   if (cardCount <= 1) return FAN_CARD_WIDTH;
