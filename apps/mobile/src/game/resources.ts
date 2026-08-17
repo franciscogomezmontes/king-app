@@ -7,7 +7,6 @@ export const GAME_RESOURCES = {
   en: {
     game: {
       you: "You",
-      bot: "Bot {{number}}",
       yourTurn: "Your turn",
       waiting: "Waiting for {{name}}…",
       dealer: "Dealer",
@@ -21,6 +20,8 @@ export const GAME_RESOURCES = {
         currentBid: "Current bid: {{tricks}}",
         noBids: "No bids yet",
         bidPrompt: "Your bid (tricks)",
+        bidDecrease: "Lower bid",
+        bidIncrease: "Raise bid",
         bid: "Bid",
         pass: "Pass",
         dealerPrompt: "Accept the bid of {{tricks}}?",
@@ -61,6 +62,9 @@ export const GAME_RESOURCES = {
         continue: "Continue",
       },
       scoreboard: {
+        title: "Scoreboard",
+        viewButton: "View Scoreboard",
+        backToTable: "Back to Table",
         total: "Total",
         negativeSubtotal: "Negative Subtotal",
         positiveSubtotal: "Positive Subtotal",
@@ -82,10 +86,9 @@ export const GAME_RESOURCES = {
   es: {
     game: {
       you: "Tú",
-      bot: "Bot {{number}}",
       yourTurn: "Tu turno",
       waiting: "Esperando a {{name}}…",
-      dealer: "Repartidor",
+      dealer: "Dealer",
       trump: {
         prompt: "Elige el triunfo",
         noTrump: "Sin Triunfo",
@@ -96,6 +99,8 @@ export const GAME_RESOURCES = {
         currentBid: "Puja actual: {{tricks}}",
         noBids: "Aún no hay pujas",
         bidPrompt: "Tu puja (bazas)",
+        bidDecrease: "Bajar puja",
+        bidIncrease: "Subir puja",
         bid: "Pujar",
         pass: "Pasar",
         dealerPrompt: "¿Aceptar la puja de {{tricks}}?",
@@ -136,6 +141,9 @@ export const GAME_RESOURCES = {
         continue: "Continuar",
       },
       scoreboard: {
+        title: "Tabla de Resultados",
+        viewButton: "Ir a Tabla de Resultados",
+        backToTable: "Volver a la Mesa",
         total: "Total",
         negativeSubtotal: "Subtotal Negativo",
         positiveSubtotal: "Subtotal Positivo",

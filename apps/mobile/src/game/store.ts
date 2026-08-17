@@ -15,6 +15,7 @@ import {
   TrumpSuit,
 } from "rules-engine";
 import { currentBidder } from "./auctionOrder";
+import { pickBotRosterIndices } from "./botRoster";
 import * as easyBot from "./easyBot";
 
 export type Difficulty = "easy" | "normal" | "hard" | "expert";
@@ -336,6 +337,10 @@ export interface GameStore {
   game: GameState;
   humanSeat: PlayerIndex;
   difficulty: Difficulty;
+  /** Which 3 `BOT_ROSTER` (botRoster.ts) entries are seats 1/2/3 for this game, in seat order —
+   * chosen once at creation (see `createGameStore`) and carried through resume, never reassigned
+   * mid-game. */
+  botRosterIndices: number[];
   biddingIndex: number;
   /** What the table should render right now — normally mirrors game.currentTrick, except it
    * briefly holds a just-completed trick's 4 cards during the reveal pause. */
@@ -368,6 +373,8 @@ export interface InitialGameState {
   game: GameState;
   humanSeat: PlayerIndex;
   difficulty: Difficulty;
+  /** See `GameStore.botRosterIndices`. */
+  botRosterIndices: number[];
   biddingIndex: number;
 }
 
@@ -396,6 +403,7 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
       game: initial.game,
       humanSeat: initial.humanSeat,
       difficulty: initial.difficulty,
+      botRosterIndices: initial.botRosterIndices,
       biddingIndex: initial.biddingIndex,
       displayTrick: initial.game.currentTrick,
       playCard: (card) => dispatch({ type: "PLAY_CARD", player: get().humanSeat, card }),
@@ -446,6 +454,9 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     game: createGame(options.ruleSet, options.firstDealer),
     humanSeat: options.humanSeat,
     difficulty: options.difficulty,
+    // Drawn from the same RandomSource as everything else here, not Math.random() directly — so a
+    // seeded test gets the same 3 bots every time, same as it gets the same deals.
+    botRosterIndices: pickBotRosterIndices(random, 3),
     biddingIndex: 0,
   };
   return buildStore(initial, random, botDelayMs);

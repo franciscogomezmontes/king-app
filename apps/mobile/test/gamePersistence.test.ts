@@ -22,6 +22,7 @@ function sampleSession(): InitialGameState {
     game: createGame(DEFAULT_GAME_RULES, 0),
     humanSeat: 0,
     difficulty: "normal",
+    botRosterIndices: [0, 1, 2],
     biddingIndex: 0,
   };
 }
@@ -39,7 +40,7 @@ describe("solo game persistence", () => {
     await saveSoloSession(session, storage);
     const loaded = await loadSoloSession(storage);
 
-    expect(loaded).toEqual({ version: 1, ...session });
+    expect(loaded).toEqual({ version: 2, ...session });
   });
 
   it("clearSoloSession removes the saved session", async () => {

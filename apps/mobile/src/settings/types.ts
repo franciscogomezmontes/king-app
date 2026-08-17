@@ -23,7 +23,7 @@ export const SETTINGS_VERSION = 1 as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
-  cardBackStyle: "lattice",
+  cardBackStyle: "royal",
   gameRules: DEFAULT_GAME_RULES,
   saveHistoryEnabled: true,
 };

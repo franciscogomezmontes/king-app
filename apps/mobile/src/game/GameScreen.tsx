@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import type { ImageSourcePropType } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { canRequestRedeal, GameRules, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
@@ -23,6 +25,7 @@ import {
   typography,
   useTranslation,
 } from "ui-kit";
+import { BOT_ROSTER } from "./botRoster";
 import { loadSoloSession, saveSoloSession, clearSoloSession, SoloGameSession } from "./persistence";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, resumeGameStore, pendingDecision } from "./store";
 
@@ -217,6 +220,7 @@ function GameTable({
   const game = store((s) => s.game);
   const humanSeat = store((s) => s.humanSeat);
   const difficulty = store((s) => s.difficulty);
+  const botRosterIndices = store((s) => s.botRosterIndices);
   const biddingIndex = store((s) => s.biddingIndex);
   const displayTrick = store((s) => s.displayTrick);
   const playCard = store((s) => s.playCard);
@@ -230,21 +234,30 @@ function GameTable({
   // Local, not persisted — a per-session display preference, not game state. Defaults on: the
   // point is to make it discoverable, not to add a hunt-for-the-setting step.
   const [showLastTrick, setShowLastTrick] = useState(true);
+  // Full results-so-far table, on demand — without it, a player can only see the running score as
+  // bare numbers in ScorePanel and has to wait for a hand to finish to see the hand-by-hand table.
+  const [showScoreboard, setShowScoreboard] = useState(false);
 
   useEffect(() => {
     if (game.phase === "game-complete") {
       clearSoloSession();
     } else {
-      saveSoloSession({ game, humanSeat, difficulty, biddingIndex });
+      saveSoloSession({ game, humanSeat, difficulty, botRosterIndices, biddingIndex });
     }
-  }, [game, humanSeat, difficulty, biddingIndex]);
+  }, [game, humanSeat, difficulty, botRosterIndices, biddingIndex]);
 
   const decision = pendingDecision(game, biddingIndex);
+  const bots = botRosterIndices.map((index) => BOT_ROSTER[index]);
   const seatLabels: Record<PlayerIndex, string> = {
     0: t("game:you"),
-    1: t("game:bot", { number: 1 }),
-    2: t("game:bot", { number: 2 }),
-    3: t("game:bot", { number: 3 }),
+    1: bots[0].name,
+    2: bots[1].name,
+    3: bots[2].name,
+  };
+  const avatarSources: Partial<Record<PlayerIndex, ImageSourcePropType>> = {
+    1: bots[0].image,
+    2: bots[1].image,
+    3: bots[2].image,
   };
 
   if (game.phase === "game-complete") {
@@ -259,7 +272,25 @@ function GameTable({
     );
   }
 
+  if (showScoreboard) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
+        >
+          <Text style={styles.title}>{t("game:scoreboard.title")}</Text>
+          <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
+          <Button label={t("game:scoreboard.backToTable")} onPress={() => setShowScoreboard(false)} variant="secondary" />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   const isHumanPlaying = decision.kind === "play" && decision.player === HUMAN_SEAT;
+  const isDecisionOverlayVisible =
+    (decision.kind === "trump" || decision.kind === "bid" || decision.kind === "dealer-decide") &&
+    decision.player === HUMAN_SEAT;
   const legalCards = isHumanPlaying ? legalCardsFor(game, HUMAN_SEAT) : [];
   const handSizes: Record<PlayerIndex, number> = {
     0: game.hands[0].length,
@@ -285,7 +316,18 @@ function GameTable({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
+          <View style={styles.headerLinks}>
+            <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
+            <Button
+              label={t("game:scoreboard.viewButton")}
+              onPress={() => setShowScoreboard(true)}
+              variant="ghost"
+              style={styles.headerLink}
+            />
+          </View>
+          <View style={styles.difficultyBadge}>
+            <Text style={styles.difficultyText}>{t(`game:difficulty.${difficulty}`)}</Text>
+          </View>
           <View style={styles.lastTrickToggle}>
             <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
             <Switch value={showLastTrick} onValueChange={setShowLastTrick} />
@@ -297,18 +339,38 @@ function GameTable({
           scores={game.cumulativeScores}
           seatLabels={seatLabels}
         />
-        <Table
-          humanSeat={HUMAN_SEAT}
-          dealer={game.dealer}
-          handSizes={handSizes}
-          tricksWon={tricksWon}
-          currentTrick={displayTrick}
-          seatLabels={seatLabels}
-          currentTurn={decision.kind === "play" ? decision.player : null}
-          lastTrick={showLastTrick ? lastCompletedTrick : null}
-          lastTrickLabel={t("game:lastTrick.label")}
-          cardBackStyle={cardBackStyle}
-        />
+        <View style={styles.tableStage}>
+          <Table
+            humanSeat={HUMAN_SEAT}
+            dealer={game.dealer}
+            handSizes={handSizes}
+            tricksWon={tricksWon}
+            currentTrick={displayTrick}
+            seatLabels={seatLabels}
+            avatarSources={avatarSources}
+            currentTurn={decision.kind === "play" ? decision.player : null}
+            lastTrick={showLastTrick ? lastCompletedTrick : null}
+            lastTrickLabel={t("game:lastTrick.label")}
+            cardBackStyle={cardBackStyle}
+          />
+          {/* Trump/auction decisions happen before any card is played this hand, so the table's
+           * center is always genuinely empty here — an overlay on top of it, not a fourth block
+           * stacked below the table, is what keeps this bigger/clearer without pushing the
+           * player's own hand further down the screen (see Francisco's explicit request). */}
+          {isDecisionOverlayVisible && (
+            <View style={styles.decisionOverlay} pointerEvents="box-none">
+              <DecisionPanel
+                game={game}
+                decision={decision}
+                declareTrump={declareTrump}
+                openAuction={openAuction}
+                submitBid={submitBid}
+                passBid={passBid}
+                dealerDecide={dealerDecide}
+              />
+            </View>
+          )}
+        </View>
         {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
           <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
         )}
@@ -318,15 +380,6 @@ function GameTable({
             <Button label={t("game:redeal.button")} onPress={requestRedeal} variant="secondary" style={styles.inlineButton} />
           </Panel>
         )}
-        <DecisionPanel
-          game={game}
-          decision={decision}
-          declareTrump={declareTrump}
-          openAuction={openAuction}
-          submitBid={submitBid}
-          passBid={passBid}
-          dealerDecide={dealerDecide}
-        />
         <Text style={styles.turnIndicator}>{turnMessage(decision, isHumanPlaying, seatLabels, t)}</Text>
         <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
       </ScrollView>
@@ -344,16 +397,67 @@ interface DecisionPanelProps {
   dealerDecide: (sell: boolean) => void;
 }
 
+// A bid can never exceed the 13 tricks a hand actually has.
+const MAX_BID_TRICKS = 13;
+
+function BidStepper({
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+}) {
+  const { t } = useTranslation();
+  const canDecrease = value > min;
+  const canIncrease = value < max;
+  return (
+    <View style={styles.stepperRow}>
+      <Pressable
+        accessibilityLabel={t("game:auction.bidDecrease")}
+        disabled={!canDecrease}
+        style={[styles.stepperButton, !canDecrease && styles.stepperButtonDisabled]}
+        onPress={() => onChange(Math.max(min, value - 1))}
+      >
+        <Text style={styles.stepperButtonLabel}>−</Text>
+      </Pressable>
+      <Text style={styles.stepperValue}>{value}</Text>
+      <Pressable
+        accessibilityLabel={t("game:auction.bidIncrease")}
+        disabled={!canIncrease}
+        style={[styles.stepperButton, !canIncrease && styles.stepperButtonDisabled]}
+        onPress={() => onChange(Math.min(max, value + 1))}
+      >
+        <Text style={styles.stepperButtonLabel}>+</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, passBid, dealerDecide }: DecisionPanelProps) {
   const { t } = useTranslation();
   const [direction, setDirection] = useState<"up" | "down">("up");
   const [backwards, setBackwards] = useState(false);
-  const [bidText, setBidText] = useState("");
+  // The lowest legal bid always strictly exceeds the current high (submitBid throws otherwise) —
+  // tracked here (rather than always starting the stepper at 1) so it's never possible to tap
+  // "Bid" while sitting on an already-illegal value.
+  const currentHigh = highestBid(game.positiveSetup?.bids ?? [])?.tricks ?? 0;
+  const minBid = Math.min(MAX_BID_TRICKS, currentHigh + 1);
+  const [bidValue, setBidValue] = useState(minBid);
+  useEffect(() => {
+    setBidValue(minBid);
+    // Only re-syncs when the floor itself moves (another bid raised it since this player's own
+    // last turn to bid) — an in-progress tap shouldn't get reset by anything else re-rendering.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minBid]);
 
   if (decision.kind === "trump" && decision.player === HUMAN_SEAT) {
     return (
-      <Panel style={styles.panel}>
-        <Text style={styles.prompt}>{t("game:trump.prompt")}</Text>
+      <Panel style={styles.overlayPanel}>
+        <Text style={styles.overlayPrompt}>{t("game:trump.prompt")}</Text>
         <View style={styles.row}>
           {SUITS.map((suit) => (
             <Pressable
@@ -397,32 +501,18 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
   }
 
   if (decision.kind === "bid" && decision.player === HUMAN_SEAT) {
-    const currentHigh = highestBid(game.positiveSetup?.bids ?? [])?.tricks ?? 0;
     return (
-      <Panel style={styles.panel}>
-        <Text style={styles.prompt}>
+      <Panel style={styles.overlayPanel}>
+        <Text style={styles.overlayPrompt}>
           {currentHigh > 0 ? t("game:auction.currentBid", { tricks: currentHigh }) : t("game:auction.noBids")}
         </Text>
+        <BidStepper value={bidValue} min={minBid} max={MAX_BID_TRICKS} onChange={setBidValue} />
         <View style={styles.row}>
-          <TextInput
-            style={styles.bidInput}
-            keyboardType="number-pad"
-            value={bidText}
-            onChangeText={setBidText}
-            placeholder={t("game:auction.bidPrompt")}
-            placeholderTextColor={colors.muted}
-          />
           <Button
             label={t("game:auction.bid")}
             variant="secondary"
             style={styles.inlineButton}
-            onPress={() => {
-              const tricks = parseInt(bidText, 10);
-              if (Number.isFinite(tricks)) {
-                submitBid(tricks);
-                setBidText("");
-              }
-            }}
+            onPress={() => submitBid(bidValue)}
           />
           <Button label={t("game:auction.pass")} onPress={passBid} variant="secondary" style={styles.inlineButton} />
         </View>
@@ -433,8 +523,8 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
   if (decision.kind === "dealer-decide" && decision.player === HUMAN_SEAT) {
     const top = highestBid(game.positiveSetup?.bids ?? []);
     return (
-      <Panel style={styles.panel}>
-        <Text style={styles.prompt}>{t("game:auction.dealerPrompt", { tricks: top?.tricks ?? 0 })}</Text>
+      <Panel style={styles.overlayPanel}>
+        <Text style={styles.overlayPrompt}>{t("game:auction.dealerPrompt", { tricks: top?.tricks ?? 0 })}</Text>
         <View style={styles.row}>
           <Button label={t("game:auction.sell")} onPress={() => dealerDecide(true)} variant="secondary" style={styles.inlineButton} />
           <Button label={t("game:auction.keep")} onPress={() => dealerDecide(false)} variant="secondary" style={styles.inlineButton} />
@@ -552,6 +642,19 @@ const styles = StyleSheet.create({
   scrollContainer: {
     width: "100%",
   },
+  // The anchor `decisionOverlay` positions itself against — every View is already an implicit
+  // absolute-positioning context in RN, but this is named/kept separate from `Table` itself (a
+  // ui-kit component) specifically so the overlay stays app-level, next to the store actions it
+  // dispatches to, rather than needing to thread all of DecisionPanel's props through ui-kit.
+  tableStage: {
+    width: "100%",
+  },
+  decisionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.md,
+  },
   header: {
     width: "100%",
     marginBottom: spacing.sm,
@@ -568,6 +671,25 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.xs,
+  },
+  headerLinks: {
+    alignItems: "flex-start",
+  },
+  // Which AI difficulty this Solo game is running at — always visible during play, not just at
+  // the picker, per Francisco's request. Online has no such concept, so this lives here (a
+  // GameScreen-local element) rather than as a prop on ui-kit's shared ScorePanel/Table.
+  difficultyBadge: {
+    backgroundColor: colors.goldMuted,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  difficultyText: {
+    color: colors.gold,
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
   },
   headerToggle: {
     color: colors.secondaryText,
@@ -601,6 +723,29 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     textAlign: "center",
   },
+  // Trump/bid/dealer-decide, rendered inside `decisionOverlay` on top of the table felt — bigger
+  // and higher-contrast than a plain inline `panel`/`prompt`, since it's now the one thing meant
+  // to visually pop as a floating box "on the table" rather than just another stacked section.
+  overlayPanel: {
+    alignItems: "center",
+    width: "auto",
+    minWidth: 260,
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  overlayPrompt: {
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
+    fontSize: 17,
+    marginBottom: spacing.md,
+    textAlign: "center",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -611,17 +756,17 @@ const styles = StyleSheet.create({
   trumpButton: {
     backgroundColor: colors.cream,
     borderRadius: radii.md,
-    width: 44,
-    height: 44,
+    width: 54,
+    height: 54,
     alignItems: "center",
     justifyContent: "center",
   },
   trumpButtonLabel: {
-    fontSize: 20,
+    fontSize: 26,
     color: colors.ink,
   },
   trumpButtonLabelSmall: {
-    fontSize: 11,
+    fontSize: 12,
     fontFamily: fonts.bodyBold,
     textAlign: "center",
     color: colors.ink,
@@ -645,14 +790,37 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: 14,
   },
-  bidInput: {
+  stepperRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  stepperButton: {
     backgroundColor: colors.cream,
     borderRadius: radii.md,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    width: 90,
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stepperButtonDisabled: {
+    opacity: 0.4,
+  },
+  stepperButtonLabel: {
+    fontSize: 26,
+    fontFamily: fonts.bodyBold,
     color: colors.ink,
-    fontFamily: fonts.body,
+    // Pulls the glyph's own visual weight up to its box's true center — "−"/"+" both sit slightly
+    // below center in this font at this size otherwise.
+    marginTop: -2,
+  },
+  stepperValue: {
+    minWidth: 48,
+    textAlign: "center",
+    color: colors.gold,
+    fontFamily: fonts.bodyBold,
+    fontSize: 28,
   },
   turnIndicator: {
     color: colors.cream,

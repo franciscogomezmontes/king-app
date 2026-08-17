@@ -31,6 +31,11 @@ export interface AvatarProps {
   /** This player is dealing the current hand — independent of whose turn it is to act. */
   isDealer?: boolean;
   size?: AvatarSize;
+  /** False when a caller already shows this player's name elsewhere (e.g. OpponentSeat's own
+   * label, when Avatar is used as a small corner badge over a card-back rather than a standalone
+   * portrait+name stack) — omits the built-in name text so it isn't rendered twice. Defaults to
+   * true, the original standalone behavior. */
+  showName?: boolean;
 }
 
 /**
@@ -49,7 +54,14 @@ export interface AvatarProps {
  * shadow rather than disappearing — never the *only* signal something changed, matching
  * king-cross-platform-ui's "verify explicitly, don't assume parity" guidance.
  */
-export function Avatar({ name, imageSource, isActive = false, isDealer = false, size = "md" }: AvatarProps) {
+export function Avatar({
+  name,
+  imageSource,
+  isActive = false,
+  isDealer = false,
+  size = "md",
+  showName = true,
+}: AvatarProps) {
   const diameter = DIAMETER[size];
   const ringDiameter = diameter + RING_PADDING * 2;
   const nameMetrics = NAME_METRICS[size];
@@ -81,12 +93,14 @@ export function Avatar({ name, imageSource, isActive = false, isDealer = false, 
           </View>
         )}
       </View>
-      <Text
-        style={[styles.name, { fontSize: nameMetrics.fontSize, marginTop: nameMetrics.marginTop }, isActive && styles.nameActive]}
-        numberOfLines={1}
-      >
-        {name}
-      </Text>
+      {showName && (
+        <Text
+          style={[styles.name, { fontSize: nameMetrics.fontSize, marginTop: nameMetrics.marginTop }, isActive && styles.nameActive]}
+          numberOfLines={1}
+        >
+          {name}
+        </Text>
+      )}
     </View>
   );
 }

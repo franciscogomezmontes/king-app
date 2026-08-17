@@ -2,7 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { InitialGameState } from "./store";
 
 const STORAGE_KEY = "king:soloGame:v1";
-const SOLO_SESSION_VERSION = 1 as const;
+// Bumped 1 -> 2 when InitialGameState gained botRosterIndices (bot avatar identities) — an old
+// saved session predates that field, so loadSoloSession's version check below rejects it (falls
+// back to the resume-or-new prompt) instead of resuming into a session with no roster assigned.
+const SOLO_SESSION_VERSION = 2 as const;
 
 /** The slice of AsyncStorage's API this module actually uses — narrow enough that tests can pass
  * a small in-memory fake instead of the real native module. Mirrors scorekeeper/persistence.ts. */

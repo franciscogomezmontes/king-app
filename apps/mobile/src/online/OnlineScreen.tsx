@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import type { GameRules, GameState, PlayerIndex } from "rules-engine";
 import { canRequestRedeal, highestBid, legalCardsFor, SUITS } from "rules-engine";
 import {

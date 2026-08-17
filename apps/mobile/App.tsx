@@ -10,7 +10,8 @@ import {
 import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { Pressable, SafeAreaView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
   I18nextProvider,
   KingMark,
@@ -51,20 +52,22 @@ export default function App() {
   }
 
   return (
-    <I18nextProvider i18n={i18n}>
-      <StatusBar style="light" />
-      {(screen === "solo" || screen === "soloResume") && (
-        <GameScreen onExit={() => setScreen("menu")} autoResume={screen === "soloResume"} />
-      )}
-      {screen === "online" && <OnlineScreen onExit={() => setScreen("menu")} />}
-      {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
-      {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
-      {screen === "settings" && (
-        <SettingsScreen onExit={() => setScreen("menu")} onHowToPlay={() => setScreen("howToPlay")} />
-      )}
-      {screen === "howToPlay" && <HowToPlayScreen onExit={() => setScreen("settings")} />}
-      {screen === "menu" && <Home onSelect={setScreen} />}
-    </I18nextProvider>
+    <SafeAreaProvider>
+      <I18nextProvider i18n={i18n}>
+        <StatusBar style="light" />
+        {(screen === "solo" || screen === "soloResume") && (
+          <GameScreen onExit={() => setScreen("menu")} autoResume={screen === "soloResume"} />
+        )}
+        {screen === "online" && <OnlineScreen onExit={() => setScreen("menu")} />}
+        {screen === "scorekeeper" && <ScorekeeperScreen onExit={() => setScreen("menu")} />}
+        {screen === "history" && <HistoryScreen onExit={() => setScreen("menu")} />}
+        {screen === "settings" && (
+          <SettingsScreen onExit={() => setScreen("menu")} onHowToPlay={() => setScreen("howToPlay")} />
+        )}
+        {screen === "howToPlay" && <HowToPlayScreen onExit={() => setScreen("settings")} />}
+        {screen === "menu" && <Home onSelect={setScreen} />}
+      </I18nextProvider>
+    </SafeAreaProvider>
   );
 }
 

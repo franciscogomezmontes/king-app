@@ -1,6 +1,17 @@
-import { applyAction, Card, createDeck, GameState, legalCardsFor, PlayerIndex, RandomSource, shuffle, Suit } from "rules-engine";
-import { CardTracker, nonDominatedLeads, trackCards } from "./cardTracker";
-import { chooseCardHeuristic } from "./heuristic";
+import {
+  applyAction,
+  Card,
+  createDeck,
+  GameState,
+  legalCardsFor,
+  NegativeHandType,
+  PlayerIndex,
+  RandomSource,
+  shuffle,
+  Suit,
+} from "rules-engine";
+import { CardTracker, trackCards } from "./cardTracker";
+import { chooseCardHeuristic, safeNegativeLeads } from "./heuristic";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 
@@ -135,10 +146,11 @@ interface RewardRange {
  * `rootCandidates`, when non-null, restricts which actions are ever considered at the tree's
  * root node specifically (`node === root`, i.e. depth 0 of this iteration — the real decision
  * being searched, before any determinization-specific divergence) — see `ismctsChooseCard`'s own
- * doc comment for why: excluding self-evidently dominated negative-hand leads (a proven master,
- * guaranteed to win with no trump to ever beat it) before the search spends any of its modest
- * budget on them, rather than trusting the budget to statistically discover what's already a known
- * domain fact. Every deeper node (any other decision point reached later in a rollout/traversal,
+ * doc comment for why: excluding negative-hand leads that are either self-evidently dominated (a
+ * proven master, guaranteed to win with no trump to ever beat it) or in this hand type's own
+ * danger category (e.g. a Jack or King in noGentlemen) before the search spends any of its modest
+ * budget on them, rather than trusting the budget to statistically discover what's already known
+ * domain facts. Every deeper node (any other decision point reached later in a rollout/traversal,
  * including this same player leading again in a later trick) is unaffected — full `legalCardsFor`
  * as always. */
 function runIteration(
@@ -220,11 +232,15 @@ export const EXPERT_BUDGET_MS = 900;
  * tests can drive this with tiny/zero budgets without waiting on production-length searches.
  *
  * For a negative-hand lead specifically, the root's candidate set excludes self-evidently
- * dominated moves (`nonDominatedLeads` — a proven master card, guaranteed to win its own trick
- * with no trump in a negative hand to ever beat it) before the search even starts, rather than
- * relying on a modest time budget spread across a wide branching factor to statistically discover
- * what's already a known domain fact — see .claude/skills/king-ai-opponent and `runIteration`'s
- * own doc comment for exactly where this applies (root only, not every node in the tree).
+ * dominated moves (`safeNegativeLeads` — a proven master card, guaranteed to win its own trick
+ * with no trump in a negative hand to ever beat it, or a card in this hand type's own danger
+ * category, e.g. a Jack or King in noGentlemen) before the search even starts, rather than relying
+ * on a modest time budget spread across a wide branching factor — worst-case exactly at trick 1,
+ * with the least tracking information and the most legal options — to statistically discover what
+ * a domain expert already knows outright: leading your own penalty card with zero information is
+ * a needless risk with no offsetting upside this bot's evaluation models. See
+ * .claude/skills/king-ai-opponent and `runIteration`'s own doc comment for exactly where this
+ * applies (root only, not every node in the tree).
  */
 export function ismctsChooseCard(
   state: GameState,
@@ -237,7 +253,7 @@ export function ismctsChooseCard(
 
   const rootCandidates: Card[] | null =
     state.handType !== "positive" && state.currentTrick.length === 0
-      ? nonDominatedLeads(rootLegal, state.hands[player], trackCards(state))
+      ? safeNegativeLeads(rootLegal, state.hands[player], trackCards(state), state.handType as NegativeHandType)
       : null;
   if (rootCandidates !== null && rootCandidates.length === 1) return rootCandidates[0];
 

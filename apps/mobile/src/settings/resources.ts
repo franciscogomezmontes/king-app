@@ -13,9 +13,10 @@ export const SETTINGS_RESOURCES = {
       cardBack: {
         title: "Card Back",
         hint: "Choose how opponents' hidden cards look in Solo vs Computer.",
-        lattice: "Lattice",
-        rings: "Rings",
-        frame: "Frame",
+        royal: "Royal",
+        suitMedallion: "Suit Medallion",
+        kMonogram: "K Monogram",
+        artDecoSunburst: "Art Deco Sunburst",
       },
       gameRules: {
         title: "Game Rules",
@@ -39,9 +40,10 @@ export const SETTINGS_RESOURCES = {
       cardBack: {
         title: "Revés de las Cartas",
         hint: "Elige cómo se ven las cartas ocultas de los rivales en Solo vs Computadora.",
-        lattice: "Rombos",
-        rings: "Anillos",
-        frame: "Marco",
+        royal: "Corona",
+        suitMedallion: "Medallón de Palos",
+        kMonogram: "Monograma K",
+        artDecoSunburst: "Sol Art Decó",
       },
       gameRules: {
         title: "Reglas del Juego",

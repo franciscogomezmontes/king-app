@@ -31,6 +31,7 @@ export function ScorePanel({ handType, handNumber, scores, seatLabels }: ScorePa
 
 const styles = StyleSheet.create({
   container: {
+    width: "100%",
     alignItems: "center",
     marginBottom: spacing.sm,
   },

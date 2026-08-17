@@ -1,13 +1,30 @@
 import { rankValue } from "./rank";
 import { Card, DEFAULT_RULE_SET, RuleSet, Suit, TrumpSuit } from "./types";
 
-/** The highest-value card of `suit` among `cards`, or null if none present. */
-function bestOfSuit(cards: Card[], suit: Suit, backwards: boolean): Card | null {
-  const inSuit = cards.filter((c) => c.suit === suit);
-  if (inSuit.length === 0) return null;
-  return inSuit.reduce((best, c) =>
+/**
+ * Would playing `candidate` (a led-suit card, from a hand that isn't void in it) currently win
+ * this trick if it were added as the next play? Mirrors trick.ts's `resolveTrick` precedence
+ * exactly (trump beats non-trump outright; otherwise the highest card of the led suit) so a card
+ * "Mandatory Killing" forces as a beat and a card that would actually win the trick never
+ * disagree — see this function's own regression test for the scenario that caught the bug this
+ * fixes: comparing candidates by raw rank within the led suit alone (ignoring that a trump may
+ * already have been thrown by an earlier player) could force a *higher* led-suit card into a
+ * trick a trump had already made unwinnable, when any legal follower would do.
+ */
+function wouldBeat(
+  candidate: Card,
+  cardsPlayedThisTrick: Card[],
+  ledSuit: Suit,
+  trumpSuit: TrumpSuit,
+  backwards: boolean,
+): boolean {
+  const hypothetical = [...cardsPlayedThisTrick, candidate];
+  const trumpCards = trumpSuit !== null ? hypothetical.filter((c) => c.suit === trumpSuit) : [];
+  const contenders = trumpCards.length > 0 ? trumpCards : hypothetical.filter((c) => c.suit === ledSuit);
+  const winner = contenders.reduce((best, c) =>
     rankValue(c.rank, backwards) > rankValue(best.rank, backwards) ? c : best,
   );
+  return winner.suit === candidate.suit && winner.rank === candidate.rank;
 }
 
 /**
@@ -18,9 +35,11 @@ function bestOfSuit(cards: Card[], suit: Suit, backwards: boolean): Card | null 
  * card is legal.
  *
  * "Mandatory Killing" (ruleSet.mandatoryKilling on), per CLAUDE.md: must beat the highest card
- * of the led suit if able; else must trump if able; free play only if void in both. "Beat" here
- * is judged only against the led suit's own cards in the trick — not against a trump another
- * player may have already thrown in — matching the rule as documented.
+ * of the led suit if able; else must trump if able; free play only if void in both. "Beat" is
+ * judged against the trick's actual current winner (see `wouldBeat`) — once someone has already
+ * trumped the trick, no led-suit follower can beat that regardless of rank, so the obligation
+ * degrades to plain follow-suit (any led-suit card is legal) rather than forcing out a needlessly
+ * high one that still loses.
  */
 export function legalPlays(
   hand: Card[],
@@ -38,9 +57,8 @@ export function legalPlays(
   }
 
   if (followers.length > 0) {
-    const currentBest = bestOfSuit(cardsPlayedThisTrick, ledSuit, ruleSet.backwards)!;
-    const beaters = followers.filter(
-      (c) => rankValue(c.rank, ruleSet.backwards) > rankValue(currentBest.rank, ruleSet.backwards),
+    const beaters = followers.filter((c) =>
+      wouldBeat(c, cardsPlayedThisTrick, ledSuit, trumpSuit, ruleSet.backwards),
     );
     return beaters.length > 0 ? beaters : followers;
   }

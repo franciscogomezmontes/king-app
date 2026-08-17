@@ -42,6 +42,15 @@ export interface PlayingCardProps {
    * the shadow layer, which would clip it. Rotation/translation belongs here, not on the inner
    * card body, so the shadow rotates/moves along with the card instead of staying axis-aligned. */
   style?: StyleProp<ViewStyle>;
+  /** Uniformly scales the whole card — border, shadow, pips, corner index, all of it — up or down
+   * from its natural `face` size, reserving exactly `scale`× that size in layout. A transform
+   * rather than a second set of hand-tuned pixel offsets (every internal position in this file is
+   * a fixed px value computed for the two `DIM` sizes) — Hand.tsx uses this to size the player's
+   * own cards against its actually-measured available width instead of being stuck at `face`'s
+   * fixed size. Defaults to 1 (no scaling; every other caller is unaffected). Not combined with
+   * `style`'s own `transform` today — the two are independent so neither caller has to know about
+   * the other's transform array. */
+  scale?: number;
 }
 
 /**
@@ -64,6 +73,7 @@ export function PlayingCard({
   disabled = false,
   highlighted = false,
   style,
+  scale = 1,
 }: PlayingCardProps) {
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
@@ -71,7 +81,7 @@ export function PlayingCard({
   const isKingHearts = card.rank === 13 && card.suit === "H";
   const dim = DIM[face];
 
-  return (
+  const card_ = (
     <View style={[styles.shadowWrap, { width: dim.width, height: dim.height }, style]}>
       <Pressable
         onPress={interactive ? onPress : undefined}
@@ -98,6 +108,24 @@ export function PlayingCard({
         )}
         {disabled && <View style={styles.shadow} pointerEvents="none" />}
       </Pressable>
+    </View>
+  );
+
+  if (scale === 1) return card_;
+
+  // Both dimensions explicit on every nested View (never `flex`/shrink-to-fit) — the exact
+  // pattern this codebase settled on after a `flex`-sized `<Image>` rendered at native resolution
+  // cropped to a corner on Android instead of scaling down (see CardBack.tsx's own doc comment).
+  return (
+    <View
+      style={{
+        width: dim.width * scale,
+        height: dim.height * scale,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <View style={{ width: dim.width, height: dim.height, transform: [{ scale }] }}>{card_}</View>
     </View>
   );
 }

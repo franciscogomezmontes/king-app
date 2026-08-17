@@ -25,7 +25,7 @@ describe("settings persistence", () => {
 
   it("round-trips a saved choice exactly", async () => {
     const storage = fakeStorage();
-    const settings = { ...DEFAULT_SETTINGS, cardBackStyle: "rings" as const };
+    const settings = { ...DEFAULT_SETTINGS, cardBackStyle: "kMonogram" as const };
     await saveSettings(settings, storage);
     expect(await loadSettings(storage)).toEqual(settings);
   });

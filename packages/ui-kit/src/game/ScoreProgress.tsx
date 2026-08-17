@@ -3,13 +3,6 @@ import { HAND_SEQUENCE, PlayerIndex } from "rules-engine";
 import { colors, fonts, radii } from "../theme";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
-/** 2 players per row (Tú/Bot1 on top, Bot2/Bot3 below) rather than 4 stacked rows — roughly halves
- * this section's height, which matters on a real phone's actual usable viewport height (browser
- * chrome eats more of it than Playwright's emulated viewports account for). */
-const PLAYER_ROWS: PlayerIndex[][] = [
-  [0, 1],
-  [2, 3],
-];
 /** 10 today, but derived from the same source `game.handIndex`/`handNumber` count against, so a
  * future rule change to the hand count never needs a second place updated. */
 const TOTAL_HANDS = HAND_SEQUENCE.length;
@@ -35,9 +28,14 @@ export interface ScoreProgressProps {
  * hand-count progress (N of 10, always available as `handNumber`) and each player's score relative
  * to the current spread among all four (a zero-centered bar, gold for positive / red for negative,
  * scaled to whoever's furthest from zero right now) — not a fabricated target field. Presentational
- * only: every prop here is data `ScorePanel` already receives from the game screen. Player rows lay
- * out 2-per-row (`PLAYER_ROWS`), not stacked 4-deep, to keep this compact enough that it doesn't
- * eat into the vertical room the table and the player's own hand need below it.
+ * only: every prop here is data `ScorePanel` already receives from the game screen.
+ *
+ * Deliberately avoids `flex: 1` for sizing the per-player bars (an earlier version used it inside a
+ * `gap`-using row and rendered correctly on Web but collapsed to overlapping, near-zero-width cells
+ * on a real Android device — a `flex-grow` computation ambiguous enough that react-native-web's
+ * CSS-based engine and RN's native Yoga engine resolved it differently). Every width in this file
+ * is either a plain percentage of a parent with its own definite width, or `100%` of a same-file
+ * sibling — no flex-grow, no `gap` (also skipped, on the same "fewer edge cases" reasoning).
  */
 export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressProps) {
   const maxMagnitude = Math.max(MIN_BAR_SCALE, ...ALL_SEATS.map((seat) => Math.abs(scores[seat])));
@@ -48,9 +46,12 @@ export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressP
     const fraction = Math.min(1, Math.abs(score) / maxMagnitude);
     return (
       <View key={seat} style={styles.playerCell}>
-        <Text style={styles.playerName} numberOfLines={1}>
-          {seatLabels[seat]}
-        </Text>
+        <View style={styles.playerHeader}>
+          <Text style={styles.playerName} numberOfLines={1}>
+            {seatLabels[seat]}
+          </Text>
+          <Text style={[styles.playerScore, positive ? styles.scorePositive : styles.scoreNegative]}>{score}</Text>
+        </View>
         <View style={styles.barTrack}>
           <View style={styles.barCenter} />
           <View
@@ -61,7 +62,6 @@ export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressP
             ]}
           />
         </View>
-        <Text style={[styles.playerScore, positive ? styles.scorePositive : styles.scoreNegative]}>{score}</Text>
       </View>
     );
   }
@@ -76,11 +76,7 @@ export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressP
           <View style={[styles.handFill, { width: `${(handNumber / TOTAL_HANDS) * 100}%` }]} />
         </View>
       </View>
-      {PLAYER_ROWS.map((row, i) => (
-        <View key={i} style={styles.playerRow}>
-          {row.map((seat) => renderPlayer(seat))}
-        </View>
-      ))}
+      <View style={styles.playerGrid}>{ALL_SEATS.map((seat) => renderPlayer(seat))}</View>
     </View>
   );
 }
@@ -88,26 +84,25 @@ export function ScoreProgress({ handNumber, scores, seatLabels }: ScoreProgressP
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    maxWidth: 320,
-    gap: 4,
   },
   handRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 2,
+    marginBottom: 8,
   },
   handLabel: {
     color: colors.cream,
     fontFamily: fonts.bodySemi,
-    fontSize: 12,
-    minWidth: 34,
+    fontSize: 13,
+    width: 40,
   },
   handTrack: {
-    flex: 1,
-    height: 4,
+    width: "82%",
+    height: 6,
     borderRadius: radii.pill,
     backgroundColor: colors.feltWell,
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
     overflow: "hidden",
   },
   handFill: {
@@ -115,28 +110,40 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
     borderRadius: radii.pill,
   },
-  playerRow: {
+  // 2 columns via wrap + a fixed 48% cell width (not flex-grow) — see the component doc comment.
+  playerGrid: {
     flexDirection: "row",
-    gap: 14,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   playerCell: {
-    flex: 1,
+    width: "48%",
+    marginBottom: 10,
+  },
+  playerHeader: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 5,
-    minWidth: 0,
+    marginBottom: 4,
   },
   playerName: {
-    width: 40,
     color: colors.secondaryText,
     fontFamily: fonts.body,
-    fontSize: 11,
+    fontSize: 13,
+  },
+  playerScore: {
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
   },
   barTrack: {
-    flex: 1,
-    height: 5,
+    width: "100%",
+    height: 8,
     borderRadius: radii.pill,
     backgroundColor: colors.feltWell,
+    // A visible border, not just the low-contrast feltWell fill, is what makes the track read as
+    // "a bar" even at zero/near-zero score.
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
     overflow: "hidden",
     position: "relative",
   },
@@ -145,7 +152,7 @@ const styles = StyleSheet.create({
     left: "50%",
     top: 0,
     bottom: 0,
-    width: 1,
+    width: 1.5,
     backgroundColor: colors.muted,
   },
   barFill: {
@@ -159,12 +166,6 @@ const styles = StyleSheet.create({
   },
   barFillNegative: {
     backgroundColor: colors.heart,
-  },
-  playerScore: {
-    width: 30,
-    textAlign: "right",
-    fontFamily: fonts.bodySemi,
-    fontSize: 11,
   },
   scorePositive: {
     color: colors.gold,

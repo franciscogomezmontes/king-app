@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
+import type { ImageSourcePropType } from "react-native";
 import type { Card, PlayerIndex } from "rules-engine";
 import { colors, fonts, radii, spacing } from "../theme";
 import { CardBackStyle } from "./CardBack";
@@ -19,6 +20,10 @@ export interface TableProps {
   tricksWon: Record<PlayerIndex, number>;
   currentTrick: { player: PlayerIndex; card: Card }[];
   seatLabels: Record<PlayerIndex, string>;
+  /** Real portrait art per opponent seat (Solo vs Computer's bot roster) — omit a seat, or the
+   * whole prop, to fall back to Avatar's placeholder silhouette (e.g. Online, before real player
+   * avatars exist). */
+  avatarSources?: Partial<Record<PlayerIndex, ImageSourcePropType>>;
   /** Whose turn it is right now, or null when it isn't anyone's card-play turn (e.g. bidding). */
   currentTurn: PlayerIndex | null;
   /** The 4 cards of the trick before this one, in play order — shown as a small reference corner
@@ -27,7 +32,7 @@ export interface TableProps {
   lastTrick?: { player: PlayerIndex; card: Card }[] | null;
   lastTrickLabel?: string;
   /** The player's Settings choice for opponents' face-down card backs. Defaults to CardBack's own
-   * default ("lattice") when omitted. */
+   * default ("royal") when omitted. */
   cardBackStyle?: CardBackStyle;
 }
 
@@ -42,6 +47,11 @@ function cardKey(card: Card): string {
 // frames no matter how well-paced the pauses between those frames are.
 const CARD_ENTER_MS = 200;
 const CARD_EXIT_MS = 150;
+
+// The already-swept-off "last trick" reference corner is deliberately secondary — smaller than
+// even the fan-face cards the player's own hand uses, let alone the live table-face cards, per
+// Francisco's explicit "esa no tiene que ser tan grande" request.
+const LAST_TRICK_CARD_SCALE = 0.72;
 
 /**
  * A fixed, small tilt + nudge per compass position — cards thrown down "casually," like a real
@@ -88,13 +98,25 @@ function TrickSlot({ card, position }: { card: Card | null; position: SeatPositi
         Animated.timing(opacity, { toValue: 1, duration: CARD_ENTER_MS, useNativeDriver: true }),
         Animated.timing(scale, { toValue: 1, duration: CARD_ENTER_MS, useNativeDriver: true }),
       ]).start();
-    } else {
-      Animated.timing(opacity, { toValue: 0, duration: CARD_EXIT_MS, useNativeDriver: true }).start(
-        ({ finished }) => {
-          if (finished) setDisplayCard(null);
-        },
-      );
+      return;
     }
+    Animated.timing(opacity, { toValue: 0, duration: CARD_EXIT_MS, useNativeDriver: true }).start();
+    // `displayCard` is cleared by this plain JS timer, deliberately *not* the animation's own
+    // `.start(callback)` completion callback — that callback is delivered by the native side
+    // (`useNativeDriver: true` runs the fade on the native UI thread, independent of the JS
+    // thread, including while JS is blocked by a long synchronous computation like Experto's
+    // ~900ms ISMCTS search; see ismcts.ts), and this codebase hit a real, repeated bug (an
+    // opponent's newly-led card going invisible) trying to make that callback safe by checking
+    // "is the target still null" at the moment it fires — sound in the orderings reasoned through
+    // at the time, but native-bridge callback delivery relative to JS's own microtask/state-update
+    // ordering isn't a guarantee this code can lean on, and evidently some ordering it allowed for
+    // still let a stale clear win. A `setTimeout` owned entirely by JS sidesteps that class of bug
+    // rather than trying to out-guess it: if a *new* card lands in this same slot before this timer
+    // fires, this whole effect re-runs for that new value, and React's own effect-cleanup below
+    // cancels this exact timer *before* the new one's own logic runs — a guarantee React itself
+    // provides, not one this code has to reconstruct by reasoning about a native callback's timing.
+    const timer = setTimeout(() => setDisplayCard(null), CARD_EXIT_MS);
+    return () => clearTimeout(timer);
     // Only the card's identity (suit+rank, or absence) should re-trigger this — not `displayCard`,
     // which this effect itself updates (that would either loop or skip the exit animation).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -133,6 +155,7 @@ export function Table({
   tricksWon,
   currentTrick,
   seatLabels,
+  avatarSources,
   currentTurn,
   lastTrick,
   lastTrickLabel,
@@ -148,6 +171,7 @@ export function Table({
     return (
       <OpponentSeat
         label={seatLabels[seat]}
+        avatarSource={avatarSources?.[seat]}
         cardCount={handSizes[seat]}
         tricksWon={tricksWon[seat]}
         isCurrentTurn={currentTurn === seat}
@@ -192,7 +216,7 @@ export function Table({
           )}
           <View style={styles.lastTrickGrid}>
             {lastTrick.map((play, index) => (
-              <PlayingCard key={`${play.player}-${index}`} card={play.card} face="fan" />
+              <PlayingCard key={`${play.player}-${index}`} card={play.card} face="fan" scale={LAST_TRICK_CARD_SCALE} />
             ))}
           </View>
         </View>
@@ -274,7 +298,7 @@ const styles = StyleSheet.create({
   lastTrickGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    width: FAN_CARD_WIDTH * 2 + 4,
+    width: FAN_CARD_WIDTH * LAST_TRICK_CARD_SCALE * 2 + 4,
     gap: 4,
   },
 });

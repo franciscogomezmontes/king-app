@@ -76,6 +76,23 @@ describe("legalPlays — Mandatory Killing", () => {
     const hand = [card("C", 2), card("H", 5)];
     expect(legalPlays(hand, [], "C", ruleSet)).toEqual(hand);
   });
+
+  it("a trump already thrown into the trick makes 'beat' impossible for a led-suit follower — any follower is legal, not just the highest", () => {
+    // Francisco's exact bug report: trump is hearts, diamonds led at 10. A later player, void in
+    // diamonds, trumps in with the 4 of hearts. The next player holds diamonds (not void, so they
+    // must follow suit, not trump) — no diamond they hold can ever beat a trump regardless of
+    // rank, so forcing out their highest diamond (K) to "beat" a 10 that's already lost serves no
+    // purpose; any of their diamonds is a legal follow.
+    const hand = [card("D", 13), card("D", 6), card("H", 9)];
+    const trick = [card("D", 10), card("H", 4)];
+    expect(legalPlays(hand, trick, "H", ruleSet)).toEqual([card("D", 13), card("D", 6)]);
+  });
+
+  it("still forces the highest led-suit beat when no trump has actually been thrown yet, even with a trump suit configured", () => {
+    const hand = [card("D", 13), card("D", 6), card("H", 9)];
+    const trick = [card("D", 10)];
+    expect(legalPlays(hand, trick, "H", ruleSet)).toEqual([card("D", 13)]);
+  });
 });
 
 describe("legalPlays — Backwards (2 high, Ace low)", () => {

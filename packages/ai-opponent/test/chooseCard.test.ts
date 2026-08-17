@@ -122,6 +122,49 @@ describe("chooseCard — negative-hand leading avoids self-evidently dominated m
   });
 });
 
+describe("chooseCard — negative-hand leading avoids this hand type's own danger category", () => {
+  // Francisco's exact bug report: at Expert difficulty, in "No J's ni K's" (noGentlemen), a bot
+  // led the very first trick of the hand with a King or Jack. The lowest-ranked card *available*
+  // happens to be a Jack here — plain "lead lowest" would pick it, exactly backwards for a hand
+  // whose entire goal is to avoid capturing a Jack or King. A safe non-J/K alternative (a Queen)
+  // exists instead and should be preferred, even though it outranks the Jack.
+  function stateWithLowestCardDangerousForNoGentlemen(): GameState {
+    return {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: [card("D", 13), card("S", 11), card("H", 12), card("C", 14)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+  }
+
+  it("chooseCardHeuristic (Normal): leads the safe Queen, not the lower-ranked but dangerous Jack", () => {
+    const led = chooseCard(stateWithLowestCardDangerousForNoGentlemen(), 0, "normal");
+    expect(led).toEqual(card("H", 12));
+  });
+
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): never leads a Jack or King when a safe alternative exists", () => {
+    for (const budgetMs of [15, 50]) {
+      const led = ismctsChooseCard(stateWithLowestCardDangerousForNoGentlemen(), 0, budgetMs, mulberry32(7));
+      expect(led.rank).not.toBe(11);
+      expect(led.rank).not.toBe(13);
+    }
+  });
+
+  it("forced position: every legal lead is dangerous (only Jacks/Kings left) — falls back to the lowest of them", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: [card("D", 13), card("S", 11)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    expect(chooseCard(state, 0)).toEqual(card("S", 11));
+  });
+});
+
 describe("chooseCard — negative hands, following suit", () => {
   it("plays the most dangerous card that still avoids winning, when a safe option exists", () => {
     // A nonWinner is a permanently safe fact — already beaten by S7, that can't change no matter

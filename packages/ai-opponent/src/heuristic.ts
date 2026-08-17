@@ -116,6 +116,45 @@ function bestMaster(cards: Card[], hand: Card[], tracker: CardTracker, ruleSet: 
 }
 
 /**
+ * Filters `legal` leads down to ones outside this hand type's own danger *category* (`dangerScore`
+ * > 0 — e.g. any Jack or King in `noGentlemen`, any Queen in `noLady`), unless every legal lead is
+ * equally dangerous (a genuinely forced position — same fallback shape as `nonDominatedLeads`).
+ * `noHearts`/`noKingOfHearts` are unaffected in practice: `legalCardsFor` already refuses to let a
+ * player lead hearts at all unless they're void in everything else, so there's nothing left here
+ * for this filter to catch for those two hand types specifically. `noTricks`/`noLastTwo` are also
+ * unaffected — `dangerScore` there is a continuous function of rank with no zero-danger card to
+ * prefer, so this always falls back to `legal` unfiltered for them, correctly leaving "lead lowest"
+ * as the only signal, exactly as before this filter existed.
+ *
+ * A different, narrower fact than `nonDominatedLeads` (proven trick-*winner*, independent of hand
+ * type) — this is "this card's category is penalized *if captured*, whether or not leading it
+ * happens to win," which `nonDominatedLeads` alone doesn't catch. See `safeNegativeLeads`, which
+ * applies both together.
+ */
+function excludeDangerousLeads(legal: Card[], handType: NegativeHandType): Card[] {
+  const safe = legal.filter((card) => dangerScore(card, handType) === 0);
+  return safe.length > 0 ? safe : legal;
+}
+
+/**
+ * The full "don't hand opponents a free or likely capture of your own penalty card" lead filter
+ * for a negative hand — shared by Tier 1's own lead branch below and ISMCTS's root candidate set
+ * (see `ismcts.ts`'s own doc comments for why a root-only restriction matters for the search
+ * specifically). Combines both known domain facts before any budget is spent statistically
+ * rediscovering them: never lead a proven master (`nonDominatedLeads`), and never voluntarily lead
+ * this hand type's own danger category (`excludeDangerousLeads`) — falling back to whichever
+ * (possibly unfiltered) set survives when a genuinely forced position leaves nothing safer.
+ */
+export function safeNegativeLeads(
+  legal: Card[],
+  hand: Card[],
+  tracker: CardTracker,
+  handType: NegativeHandType,
+): Card[] {
+  return excludeDangerousLeads(nonDominatedLeads(legal, hand, tracker), handType);
+}
+
+/**
  * Leading a positive-hand trick, aware of what's already been played and shown void (`tracker`) —
  * the "normal" difficulty's specific improvement over always leading the flat-highest card:
  *
@@ -229,12 +268,14 @@ export function chooseCardHeuristic(state: GameState, player: PlayerIndex, track
     // lead maximizes safety on the trick actually in front of them, so tracking doesn't change
     // this branch), positive hands lead high, tracking-aware when enabled.
     if (!isPositive) {
-      // Exclude self-evidently dominated leads first (a proven master, guaranteed to win its own
-      // trick with no trump around to ever be beaten) — see `nonDominatedLeads`'s doc comment.
-      // Almost always a no-op here (a master is usually a high card, not the lowest legal one),
-      // but makes the avoidance explicit and shared with ISMCTS's root instead of relying on
-      // "lead lowest" to dodge it by incidental luck.
-      const safeLeads = nonDominatedLeads(legal, state.hands[player], trackCards(state));
+      // Exclude self-evidently dominated leads (a proven master, guaranteed to win its own trick
+      // with no trump around to ever be beaten) and this hand type's own danger category (e.g.
+      // never voluntarily lead a Jack or King in noGentlemen) before falling back to "lead
+      // lowest" — see `safeNegativeLeads`'s doc comment. The danger-category exclusion is not a
+      // no-op the way the master exclusion usually is: "lead lowest" only *incidentally* avoids
+      // high danger-category cards like J/K, and fails to when they happen to be the lowest cards
+      // actually in hand.
+      const safeLeads = safeNegativeLeads(legal, state.hands[player], trackCards(state), state.handType as NegativeHandType);
       return lowestCard(safeLeads, ruleSet.backwards);
     }
     if (!tracking) return highestCard(legal, ruleSet.backwards);
