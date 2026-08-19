@@ -1,31 +1,59 @@
 import { StyleSheet, Text, View } from "react-native";
-import { CardBack } from "./CardBack";
-import { DealerBadge } from "./DealerBadge";
+import type { ImageSourcePropType } from "react-native";
+import { colors, fonts, spacing } from "../theme";
+import { Avatar } from "./Avatar";
+import { CardBack, CardBackStyle } from "./CardBack";
 import { TrickPile } from "./TrickPile";
 
 export interface OpponentSeatProps {
   label: string;
+  /** Real portrait art, if any — omit for Avatar's placeholder silhouette. */
+  avatarSource?: ImageSourcePropType;
   cardCount: number;
   isCurrentTurn: boolean;
   /** How many tricks this opponent has won so far this hand. */
   tricksWon: number;
   /** Whether this seat is dealing the current hand — always shown, independent of whose turn it is. */
   isDealer: boolean;
+  /** Which face-down pattern to render for this opponent's hidden hand — the player's Settings
+   * choice. Defaults to CardBack's own default ("royal") when omitted. */
+  cardBackStyle?: CardBackStyle;
 }
 
-/** An opponent's seat: name/position, remaining card count, and their face-down pile of tricks
- * won so far — highlighted on their turn, badged when they're the dealer. Their card for the
- * trick in progress shows in the table's center pile instead (see Table), not pinned to their seat. */
-export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDealer }: OpponentSeatProps) {
+// An opponent's own hidden hand is secondary information, not a card in play — a bit smaller than
+// the table-cluster's own "table"-face cards, freeing up vertical room overall.
+const CARD_BACK_SCALE = 0.82;
+
+/** An opponent's seat: name, a face-down card-back with their avatar overlaid as a corner badge
+ * (rather than a separate stacked portrait above it — see Francisco's "aprovechar mejor el
+ * espacio" layout request), and a compact row below combining their remaining card count with
+ * their pile of tricks won so far — previously two separate stacked rows, which is what put the
+ * top-seat opponent's trick pile awkwardly right under their cards. Their card for the trick in
+ * progress shows in the table's center pile instead (see Table), not pinned to their seat. */
+export function OpponentSeat({
+  label,
+  avatarSource,
+  cardCount,
+  isCurrentTurn,
+  tricksWon,
+  isDealer,
+  cardBackStyle,
+}: OpponentSeatProps) {
   return (
-    <View style={[styles.container, isCurrentTurn && styles.active]}>
-      <Text style={styles.label}>{label}</Text>
-      <View style={styles.stack}>
-        <CardBack />
-        <Text style={styles.count}>×{cardCount}</Text>
+    <View style={styles.container}>
+      <Text style={[styles.name, isCurrentTurn && styles.nameActive]} numberOfLines={1}>
+        {label}
+      </Text>
+      <View style={styles.cardBackWrap}>
+        <CardBack variant={cardBackStyle} scale={CARD_BACK_SCALE} />
+        <View style={styles.avatarBadge}>
+          <Avatar name={label} imageSource={avatarSource} isActive={isCurrentTurn} isDealer={isDealer} size="sm" showName={false} />
+        </View>
       </View>
-      {isDealer && <DealerBadge />}
-      <TrickPile count={tricksWon} />
+      <View style={styles.belowRow}>
+        <Text style={styles.count}>×{cardCount}</Text>
+        <TrickPile count={tricksWon} />
+      </View>
     </View>
   );
 }
@@ -33,25 +61,36 @@ export function OpponentSeat({ label, cardCount, isCurrentTurn, tricksWon, isDea
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    padding: 8,
-    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  active: {
-    backgroundColor: "#1c7a53",
+  name: {
+    color: colors.cream,
+    fontFamily: fonts.bodySemi,
+    fontSize: 12,
+    maxWidth: 90,
+    marginBottom: 2,
   },
-  label: {
-    color: "#f5e6c8",
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 4,
+  nameActive: {
+    color: colors.gold,
   },
-  stack: {
+  cardBackWrap: {
+    marginTop: 6,
+  },
+  avatarBadge: {
+    position: "absolute",
+    top: -14,
+    right: -14,
+  },
+  belowRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginTop: 2,
   },
   count: {
-    color: "#c9d8cf",
-    fontSize: 13,
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
+    fontSize: 12,
   },
 });

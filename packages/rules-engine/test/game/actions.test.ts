@@ -7,6 +7,7 @@ import {
   legalCardsFor,
   openAuction,
   playCard,
+  requestRedeal,
   resolveDealerDecision,
   submitBid,
 } from "../../src/game/actions";
@@ -14,6 +15,23 @@ import { createGame, DEFAULT_GAME_RULES, GameRules, GameState, PositiveHandSetup
 import { Card, PlayerIndex, Trick } from "../../src/types";
 
 const rulesWith = (overrides: Partial<GameRules>): GameRules => ({ ...DEFAULT_GAME_RULES, ...overrides });
+
+/** Builds a full, valid 52-card deck (as `deal()`'s round-robin expects) with `hand` (exactly 13
+ * cards) guaranteed to land on `forPlayer`, so a redeal test can set up "this player's hand has
+ * zero face cards" deterministically instead of relying on a lucky shuffle. */
+function buildDeckWithHand(hand: Card[], forPlayer: PlayerIndex): Card[] {
+  const remaining = createDeck().filter((c) => !hand.some((h) => h.suit === c.suit && h.rank === c.rank));
+  const deck: Card[] = [];
+  let handIndex = 0;
+  let restIndex = 0;
+  for (let i = 0; i < 52; i++) {
+    if (i % 4 === forPlayer) deck.push(hand[handIndex++]);
+    else deck.push(remaining[restIndex++]);
+  }
+  return deck;
+}
+
+const NON_FACE_CARDS = createDeck().filter((c) => c.rank < 11); // ranks 2-10, 36 cards total
 
 function withPositiveHand(state: GameState, overrides: Partial<PositiveHandSetup> = {}): GameState {
   return {
@@ -65,6 +83,122 @@ describe("dealHand", () => {
   it("throws if not awaiting-deal", () => {
     const dealt = dealHand(createGame(DEFAULT_GAME_RULES, 0), createDeck());
     expect(() => dealHand(dealt, createDeck())).toThrow();
+  });
+});
+
+describe("requestRedeal", () => {
+  const noFaceHand = NON_FACE_CARDS.slice(0, 13);
+  const oneFaceHand = [...NON_FACE_CARDS.slice(0, 12), { suit: "S", rank: 11 } as Card];
+
+  function dealtPositiveHand(player: PlayerIndex, hand: Card[], dealer: PlayerIndex = 0): GameState {
+    let state = createGame(DEFAULT_GAME_RULES, dealer);
+    state = { ...state, handIndex: 6, handType: "positive" };
+    return dealHand(state, buildDeckWithHand(hand, player));
+  }
+
+  it("redeals: fresh hands, back to trump-selection, same dealer, positiveSetup reset", () => {
+    const state = dealtPositiveHand(0, noFaceHand, /* dealer */ 2);
+    const redealt = requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0));
+    expect(redealt.phase).toBe("trump-selection");
+    expect(redealt.dealer).toBe(2); // unchanged — same hand, same dealer, just redealt
+    expect(redealt.handIndex).toBe(6); // still the same hand, not advanced
+    expect(redealt.positiveSetup).toEqual({
+      trumpNamer: 2,
+      trump: null,
+      direction: "up",
+      backwards: false,
+      auctionOpened: false,
+      bids: [],
+      auction: null,
+    });
+    for (const player of [0, 1, 2, 3] as PlayerIndex[]) expect(redealt.hands[player]).toHaveLength(13);
+  });
+
+  it("also clears the empty completedTricks/currentTrick (both already empty right after a deal, but stays correct if requested again after a partial trick elsewhere)", () => {
+    const state = dealtPositiveHand(0, noFaceHand);
+    const redealt = requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0));
+    expect(redealt.completedTricks).toEqual([]);
+    expect(redealt.currentTrick).toEqual([]);
+  });
+
+  it("throws when the rule is disabled", () => {
+    let state = dealtPositiveHand(0, noFaceHand);
+    state = { ...state, ruleSet: rulesWith({ noFaceCardsRedealEnabled: false }) };
+    expect(() => requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0))).toThrow();
+  });
+
+  it("throws for a negative hand", () => {
+    let state = createGame(DEFAULT_GAME_RULES, 0);
+    state = dealHand(state, buildDeckWithHand(noFaceHand, 0));
+    expect(state.handType).not.toBe("positive");
+    expect(() => requestRedeal(state, 0, createDeck())).toThrow();
+  });
+
+  it("throws when the player's hand has a face card", () => {
+    const state = dealtPositiveHand(0, oneFaceHand);
+    expect(() => requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0))).toThrow();
+  });
+
+  it("throws once the requesting player has played a card this hand, even mid-auction after another player already went", () => {
+    let state = dealtPositiveHand(0, noFaceHand);
+    state = declareTrump(state, state.dealer, "S", "up", false); // dealer names trump directly
+    // Keep feeding legal plays (mandatoryKilling defaults on, so an arbitrary card can be illegal)
+    // until player 0 has played once, matching real turn order.
+    while (!state.currentTrick.some((p) => p.player === 0) && state.phase === "playing") {
+      const turn = state.currentTurn;
+      state = playCard(state, turn, legalCardsFor(state, turn)[0]);
+    }
+    expect(() => requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0))).toThrow();
+  });
+
+  it("does NOT close another player's window just because someone else already played", () => {
+    let state = dealtPositiveHand(0, noFaceHand);
+    state = declareTrump(state, state.dealer, "S", "up", false);
+    // Whoever leads first plays a card — this should not affect player 0's own eligibility unless
+    // player 0 was the one who played.
+    const leader = state.currentTurn;
+    if (leader !== 0) {
+      state = playCard(state, leader, legalCardsFor(state, leader)[0]);
+      expect(() => requestRedeal(state, 0, buildDeckWithHand(noFaceHand, 0))).not.toThrow();
+    }
+  });
+
+  it("a full game can still reach game-complete zero-sum after a mid-game redeal", () => {
+    let state = createGame(DEFAULT_GAME_RULES, 0);
+    // Play through the 6 negative hands untouched.
+    for (let i = 0; i < 6; i++) {
+      state = dealHand(state, createDeck());
+      while (state.phase === "playing") {
+        const turn = state.currentTurn;
+        const legal = legalCardsFor(state, turn);
+        state = playCard(state, turn, legal[0]);
+      }
+      state = advanceHand(state);
+    }
+    // Hand 7 (first positive hand): redeal once, then play it out normally.
+    state = dealHand(state, buildDeckWithHand(noFaceHand, state.dealer));
+    state = requestRedeal(state, state.dealer, createDeck());
+    state = declareTrump(state, state.dealer, "S", "up", false);
+    while (state.phase === "playing") {
+      const turn = state.currentTurn;
+      const legal = legalCardsFor(state, turn);
+      state = playCard(state, turn, legal[0]);
+    }
+    state = advanceHand(state);
+    // Remaining 3 positive hands, untouched.
+    for (let i = 0; i < 3; i++) {
+      state = dealHand(state, createDeck());
+      state = declareTrump(state, state.dealer, "S", "up", false);
+      while (state.phase === "playing") {
+        const turn = state.currentTurn;
+        const legal = legalCardsFor(state, turn);
+        state = playCard(state, turn, legal[0]);
+      }
+      state = advanceHand(state);
+    }
+    expect(state.phase).toBe("game-complete");
+    const total = state.cumulativeScores[0] + state.cumulativeScores[1] + state.cumulativeScores[2] + state.cumulativeScores[3];
+    expect(total).toBe(0);
   });
 });
 

@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from "react-native";
 import type { PlayerIndex, PositiveHandSetup } from "rules-engine";
 import { useTranslation } from "../i18n";
+import { colors, fonts, radii, spacing } from "../theme";
 import { SUIT_SYMBOLS } from "./PlayingCard";
 
 export interface AuctionSummaryProps {
@@ -31,7 +32,7 @@ export function AuctionSummary({ positiveSetup, seatLabels }: AuctionSummaryProp
       <Text style={styles.trumpText}>
         {t("game:auctionSummary.trump")}: {trumpLabel}
         {positiveSetup.direction === "down" ? " · " + t("rules:playingDirection.down") : ""}
-        {positiveSetup.backwards ? " · " + t("rules:ruleToggles.backwards.name") : ""}
+        {positiveSetup.backwards ? " · " + t("rules:ruleToggles.backwardsEnabled.name") : ""}
       </Text>
     </View>
   );
@@ -40,16 +41,23 @@ export function AuctionSummary({ positiveSetup, seatLabels }: AuctionSummaryProp
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    width: "100%",
   },
   text: {
-    color: "#c9d8cf",
+    color: colors.secondaryText,
+    fontFamily: fonts.body,
     fontSize: 12,
+    textAlign: "center",
   },
   trumpText: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.bodyBold,
     fontSize: 14,
-    fontWeight: "700",
     marginTop: 2,
   },
 });

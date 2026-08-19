@@ -1,15 +1,24 @@
-import type { NegativeHandType, RuleSet } from "rules-engine";
+import type { GameRules, NegativeHandType } from "rules-engine";
 import type { Locale } from "./locale";
 
 /**
- * The RuleSet toggles that get a standalone name/description in the settings menu.
- * `playingDirection` isn't a boolean toggle the same way the others are — it's a two-way choice
- * the dealer makes when playing a positive hand, not an on/off switch in a settings list — so
- * it's handled by `playingDirection` below instead. Deriving this from `keyof RuleSet` means a
- * new boolean toggle added to RuleSet in rules-engine automatically becomes a compile error here
- * until it's translated for both locales.
+ * Every `GameRules` field gets a standalone name/description here — this is the game-setup menu
+ * a player configures once per game (CLAUDE.md principle 3), so it's keyed off `GameRules`, not
+ * the per-computation `RuleSet`. All five fields happen to be plain booleans today, so this list
+ * doubles as the settings screen's actual toggle list (`GAME_RULE_TOGGLE_KEYS` below) — deriving
+ * both from `keyof GameRules` means a new toggle added to `GameRules` in rules-engine is both a
+ * compile error here until it's translated for both locales, *and* automatically shows up as a
+ * new row in Settings without any UI code changes.
  */
-export type RuleToggleKey = Exclude<keyof RuleSet, "playingDirection">;
+export type RuleToggleKey = keyof GameRules;
+
+export const GAME_RULE_TOGGLE_KEYS: RuleToggleKey[] = [
+  "mandatoryKilling",
+  "auctionMustSell",
+  "playingDownEnabled",
+  "backwardsEnabled",
+  "noFaceCardsRedealEnabled",
+];
 
 interface Labeled {
   name: string;
@@ -20,7 +29,7 @@ export interface RulesLabels {
   negativeHands: Record<NegativeHandType, Labeled>;
   positiveHand: Labeled;
   ruleToggles: Record<RuleToggleKey, Labeled>;
-  playingDirection: Record<RuleSet["playingDirection"], string>;
+  playingDirection: Record<"up" | "down", string>;
 }
 
 /**
@@ -66,9 +75,19 @@ export const RULES_LABELS: Record<Locale, RulesLabels> = {
         name: "Auction Must Sell",
         description: "If the dealer opens an auction, they must accept the winning bid.",
       },
-      backwards: {
+      playingDownEnabled: {
+        name: "Playing Down",
+        description:
+          "Let the dealer choose to play a positive hand \"down\" (start at 325, lose points per trick) instead of always \"up\".",
+      },
+      backwardsEnabled: {
         name: "Backwards",
         description: "Whoever names trump can reverse card rank for the hand — 2 high, ace low.",
+      },
+      noFaceCardsRedealEnabled: {
+        name: "No Face Cards Redeal",
+        description:
+          "A player dealt a positive hand with no J, Q, K, or A can ask for that hand to be redealt to everyone, as long as they haven't played their first card yet.",
       },
     },
     playingDirection: {
@@ -108,9 +127,19 @@ export const RULES_LABELS: Record<Locale, RulesLabels> = {
         name: "Subasta Obligatoria",
         description: "Si el repartidor abre una subasta, debe aceptar la puja ganadora.",
       },
-      backwards: {
-        name: "Al Revés",
+      playingDownEnabled: {
+        name: "Jugar Hacia Abajo",
+        description:
+          "Permite que el repartidor elija jugar una mano positiva \"hacia abajo\" (empieza en 325 y pierde puntos por baza) en vez de siempre \"hacia arriba\".",
+      },
+      backwardsEnabled: {
+        name: "Revés",
         description: "Quien nombra el triunfo puede invertir el orden de las cartas en la mano — el 2 es la más alta y el as la más baja.",
+      },
+      noFaceCardsRedealEnabled: {
+        name: "Cambio de Juego (Sin Figuras)",
+        description:
+          "Un jugador al que le reparten una mano positiva sin J, Q, K ni As puede pedir que se reparta esa mano de nuevo a todos, mientras no haya jugado aún su primera carta.",
       },
     },
     playingDirection: {

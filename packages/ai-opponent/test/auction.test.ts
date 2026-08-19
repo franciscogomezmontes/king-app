@@ -6,7 +6,7 @@ function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
 }
 
-const strongHand = [card("S", 14), card("H", 14), card("D", 14), card("C", 13)]; // estimateTricks = 5
+const strongHand = [card("S", 14), card("H", 14), card("D", 14), card("C", 13)]; // estimateTricks = 3
 const weakHand = [card("S", 2), card("H", 3), card("D", 4), card("C", 5)]; // estimateTricks = 0
 
 function stateWithBids(hand: Card[], bids: AuctionBid[]): GameState {
@@ -28,7 +28,7 @@ function stateWithBids(hand: Card[], bids: AuctionBid[]): GameState {
 
 describe("chooseBid", () => {
   it("bids its hand estimate when it exceeds the current high bid", () => {
-    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(5);
+    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(3);
   });
 
   it("declines when its estimate doesn't exceed the current high bid", () => {

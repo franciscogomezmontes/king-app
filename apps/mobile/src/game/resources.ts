@@ -7,7 +7,6 @@ export const GAME_RESOURCES = {
   en: {
     game: {
       you: "You",
-      bot: "Bot {{number}}",
       yourTurn: "Your turn",
       waiting: "Waiting for {{name}}…",
       dealer: "Dealer",
@@ -21,6 +20,8 @@ export const GAME_RESOURCES = {
         currentBid: "Current bid: {{tricks}}",
         noBids: "No bids yet",
         bidPrompt: "Your bid (tricks)",
+        bidDecrease: "Lower bid",
+        bidIncrease: "Raise bid",
         bid: "Bid",
         pass: "Pass",
         dealerPrompt: "Accept the bid of {{tricks}}?",
@@ -33,18 +34,37 @@ export const GAME_RESOURCES = {
         trump: "Trump",
       },
       backToMenu: "Back to Menu",
+      lastTrick: {
+        toggle: "Last trick",
+        label: "Last trick",
+      },
+      redeal: {
+        banner: "Your hand has no face cards (J, Q, K, A) — you can request a redeal.",
+        button: "Request Redeal",
+      },
       gameOver: "Game Over",
       difficulty: {
         label: "Difficulty",
         easy: "Easy",
         normal: "Normal",
+        hard: "Hard",
+        expert: "Expert",
       },
       start: "Start Game",
+      resume: {
+        title: "Unfinished Game",
+        body: "You have a game in progress. Resume it, or start a new one instead?",
+        resume: "Resume Game",
+        startNew: "Start New Game",
+      },
       handComplete: {
         title: "Hand {{number}} Complete",
         continue: "Continue",
       },
       scoreboard: {
+        title: "Scoreboard",
+        viewButton: "View Scoreboard",
+        backToTable: "Back to Table",
         total: "Total",
         negativeSubtotal: "Negative Subtotal",
         positiveSubtotal: "Positive Subtotal",
@@ -66,10 +86,9 @@ export const GAME_RESOURCES = {
   es: {
     game: {
       you: "Tú",
-      bot: "Bot {{number}}",
       yourTurn: "Tu turno",
       waiting: "Esperando a {{name}}…",
-      dealer: "Repartidor",
+      dealer: "Dealer",
       trump: {
         prompt: "Elige el triunfo",
         noTrump: "Sin Triunfo",
@@ -80,6 +99,8 @@ export const GAME_RESOURCES = {
         currentBid: "Puja actual: {{tricks}}",
         noBids: "Aún no hay pujas",
         bidPrompt: "Tu puja (bazas)",
+        bidDecrease: "Bajar puja",
+        bidIncrease: "Subir puja",
         bid: "Pujar",
         pass: "Pasar",
         dealerPrompt: "¿Aceptar la puja de {{tricks}}?",
@@ -92,18 +113,37 @@ export const GAME_RESOURCES = {
         trump: "Triunfo",
       },
       backToMenu: "Volver al Menú",
+      lastTrick: {
+        toggle: "Última baza",
+        label: "Última baza",
+      },
+      redeal: {
+        banner: "Tu mano no tiene figuras (J, Q, K, As) — puedes pedir cambio de juego.",
+        button: "Pedir Cambio de Juego",
+      },
       gameOver: "Fin del Juego",
       difficulty: {
         label: "Dificultad",
         easy: "Fácil",
         normal: "Normal",
+        hard: "Difícil",
+        expert: "Experto",
       },
       start: "Empezar Juego",
+      resume: {
+        title: "Partida sin Terminar",
+        body: "Tienes una partida en curso. ¿Quieres continuarla, o empezar una nueva?",
+        resume: "Continuar Partida",
+        startNew: "Empezar Partida Nueva",
+      },
       handComplete: {
         title: "Mano {{number}} Completa",
         continue: "Continuar",
       },
       scoreboard: {
+        title: "Tabla de Resultados",
+        viewButton: "Ir a Tabla de Resultados",
+        backToTable: "Volver a la Mesa",
         total: "Total",
         negativeSubtotal: "Subtotal Negativo",
         positiveSubtotal: "Subtotal Positivo",
