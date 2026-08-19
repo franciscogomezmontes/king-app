@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
+  Avatar,
   I18nextProvider,
   KingMark,
   SUPPORTED_LOCALES,
@@ -25,16 +26,28 @@ import {
   typography,
   useTranslation,
 } from "ui-kit";
+import { BOT_ROSTER } from "./src/game/botRoster";
 import { GameScreen } from "./src/game/GameScreen";
 import { loadSoloSession } from "./src/game/persistence";
 import { HistoryScreen } from "./src/history/HistoryScreen";
 import { HowToPlayScreen } from "./src/howToPlay/HowToPlayScreen";
 import { initI18n } from "./src/i18n";
 import { OnlineScreen } from "./src/online/OnlineScreen";
+import { ProfileScreen } from "./src/profile/ProfileScreen";
+import { useProfile } from "./src/profile/useProfile";
 import { ScorekeeperScreen } from "./src/scorekeeper/ScorekeeperScreen";
 import { SettingsScreen } from "./src/settings/SettingsScreen";
 
-type Screen = "menu" | "solo" | "soloResume" | "scorekeeper" | "history" | "settings" | "online" | "howToPlay";
+type Screen =
+  | "menu"
+  | "solo"
+  | "soloResume"
+  | "scorekeeper"
+  | "history"
+  | "settings"
+  | "online"
+  | "howToPlay"
+  | "profile";
 
 export default function App() {
   const [i18n] = useState(() => initI18n());
@@ -65,6 +78,7 @@ export default function App() {
           <SettingsScreen onExit={() => setScreen("menu")} onHowToPlay={() => setScreen("howToPlay")} />
         )}
         {screen === "howToPlay" && <HowToPlayScreen onExit={() => setScreen("settings")} />}
+        {screen === "profile" && <ProfileScreen onExit={() => setScreen("menu")} />}
         {screen === "menu" && <Home onSelect={setScreen} />}
       </I18nextProvider>
     </SafeAreaProvider>
@@ -80,6 +94,7 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
   // after a game finishes (which clears the session) or a fresh one starts (which doesn't exist to
   // find until the first card is dealt) — so this never goes stale while the app stays open.
   const [hasResumableSolo, setHasResumableSolo] = useState(false);
+  const { profile } = useProfile();
 
   useEffect(() => {
     loadSoloSession().then((session) => setHasResumableSolo(session !== null));
@@ -88,6 +103,20 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.topBar}>
+          <Pressable onPress={() => onSelect("profile")} accessibilityLabel={t("profile:title")}>
+            <Avatar
+              name={profile.name}
+              imageSource={profile.avatarIndex !== null ? BOT_ROSTER[profile.avatarIndex].image : undefined}
+              showName={false}
+              size="sm"
+            />
+          </Pressable>
+          <Pressable onPress={() => onSelect("settings")} accessibilityLabel={t("settings:title")} style={styles.gearButton}>
+            <Text style={styles.gearIcon}>⚙</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.hero}>
           <KingMark size="lg" />
           <Text style={[styles.title, isCompact && styles.titleCompact]}>{t("app:title")}</Text>
@@ -128,12 +157,6 @@ function Home({ onSelect }: { onSelect: (screen: Screen) => void }) {
               <Text style={styles.modeHint}>{t("app:modes.historyHint")}</Text>
             </Surface>
           </Pressable>
-          <Pressable onPress={() => onSelect("settings")}>
-            <Surface style={styles.modeCard}>
-              <Text style={styles.modeLabel}>{t("settings:title")}</Text>
-              <Text style={styles.modeHint}>{t("app:modes.settingsHint")}</Text>
-            </Surface>
-          </Pressable>
         </View>
 
         <View style={styles.languageRow}>
@@ -162,13 +185,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.felt,
     alignItems: "center",
-    paddingTop: 64,
+    // Was 64 — now that topBar (Profile/Settings corner buttons) is its own real row up top, that
+    // row already gives the screen breathing room before the hero; a second large fixed padding on
+    // top of it just wasted vertical space this screen doesn't have to spare (see hasResumableSolo
+    // sometimes adding a whole extra mode card below).
+    paddingTop: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
   content: {
     width: "100%",
     alignSelf: "center",
     flex: 1,
+  },
+  // Profile (left) and Settings (right) — corner icon buttons instead of two more items in an
+  // already-long mode list (Francisco's explicit request). Real flex-row content, not absolutely
+  // positioned overlaying the hero below it — reserves its own space, so nothing needs manual
+  // offset math to avoid colliding with the KingMark/title underneath it.
+  topBar: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+  },
+  gearButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.goldMuted,
+  },
+  gearIcon: {
+    fontSize: 26,
+    color: colors.gold,
   },
   hero: {
     alignItems: "center",

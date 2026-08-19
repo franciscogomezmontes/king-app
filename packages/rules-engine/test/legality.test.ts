@@ -93,6 +93,24 @@ describe("legalPlays — Mandatory Killing", () => {
     const trick = [card("D", 10)];
     expect(legalPlays(hand, trick, "H", ruleSet)).toEqual([card("D", 13)]);
   });
+
+  it("void in led suit, and every held trump is lower than one already thrown — free play, not a forced losing trump", () => {
+    // Francisco's exact live bug report: trump is spades, diamonds led. Andrea, void in diamonds,
+    // trumps in with the 6 of spades. Francisco (also void in diamonds) holds only lower spades
+    // (5, 3) plus other cards — neither spade can beat the 6 already on the table, so "must trump
+    // if able" shouldn't apply here any more than "must beat" applies to a led-suit follower who
+    // can't beat (see the test above this one) — nothing forces either losing spade out, and any
+    // card in hand, trump or not, stays legal.
+    const hand = [card("S", 5), card("S", 3), card("H", 9), card("C", 8)];
+    const trick = [card("D", 10), card("S", 6), card("C", 4)];
+    expect(legalPlays(hand, trick, "S", ruleSet)).toEqual(hand);
+  });
+
+  it("void in led suit — must trump with whichever held trump actually beats, when at least one can", () => {
+    const hand = [card("S", 9), card("S", 3), card("H", 9)];
+    const trick = [card("D", 10), card("S", 6)];
+    expect(legalPlays(hand, trick, "S", ruleSet)).toEqual([card("S", 9)]);
+  });
 });
 
 describe("legalPlays — Backwards (2 high, Ace low)", () => {

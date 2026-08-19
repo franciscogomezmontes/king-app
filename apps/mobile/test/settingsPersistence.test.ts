@@ -25,7 +25,7 @@ describe("settings persistence", () => {
 
   it("round-trips a saved choice exactly", async () => {
     const storage = fakeStorage();
-    const settings = { ...DEFAULT_SETTINGS, cardBackStyle: "kMonogram" as const };
+    const settings = { ...DEFAULT_SETTINGS, cardBackStyle: "medallion" as const };
     await saveSettings(settings, storage);
     expect(await loadSettings(storage)).toEqual(settings);
   });
@@ -47,6 +47,22 @@ describe("settings persistence", () => {
     const settings = { ...DEFAULT_SETTINGS, gameRules: { ...DEFAULT_SETTINGS.gameRules, backwardsEnabled: true } };
     await saveSettings(settings, storage);
     expect((await loadSettings(storage)).gameRules.backwardsEnabled).toBe(true);
+  });
+
+  it("falls back to the default card back for a renamed/removed cardBackStyle value instead of keeping the stale one", async () => {
+    const storage = fakeStorage();
+    // Simulates a blob saved back when this field could be "lattice"/"rings"/"frame" (or later
+    // "suitMedallion"/"kMonogram"/"artDecoSunburst", before either was renamed) — CardBack.tsx's
+    // CARD_BACK_IMAGES has no entry for any of those any more.
+    await storage.setItem(
+      "king:settings:v1",
+      JSON.stringify({ ...DEFAULT_SETTINGS, cardBackStyle: "kMonogram" }),
+    );
+    const loaded = await loadSettings(storage);
+    expect(loaded.cardBackStyle).toBe(DEFAULT_SETTINGS.cardBackStyle);
+    // The rest of the blob wasn't discarded wholesale over one stale field — same forward-
+    // compatibility spirit as the gameRules field-merge below.
+    expect(loaded.saveHistoryEnabled).toBe(DEFAULT_SETTINGS.saveHistoryEnabled);
   });
 
   it("fills in a missing gameRules field with its default instead of undefined (forward compatibility)", async () => {

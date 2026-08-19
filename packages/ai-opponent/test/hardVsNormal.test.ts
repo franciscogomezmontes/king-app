@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, createDeck, createGame, GameRules, GameState, PlayerIndex, shuffle } from "rules-engine";
+import { applyAction, createDeck, createGame, GameRules, GameState, highestBid, PlayerIndex, shuffle } from "rules-engine";
 import {
+  bestTrumpCandidate,
   chooseBid,
   chooseCard,
   chooseDealerDecision,
   chooseTrumpDeclaration,
+  decideBid,
+  decideOpenAuction,
+  decideSell,
+  decideTrumpDeclaration,
   Difficulty,
   ismctsChooseCard,
   shouldOpenAuction,
@@ -146,4 +151,135 @@ describe("hard vs. normal — full-game score comparison", () => {
 
     expect(hardAverage).toBeGreaterThan(normalAverage);
   }, 120_000);
+});
+
+// Once-per-hand decisions get their own, much smaller test budget than production
+// (HARD_TRUMP_BUDGET_MS/EXPERT_TRUMP_BUDGET_MS, 600-2500ms) — same rationale as
+// TEST_SEARCH_BUDGET_MS above. A full game visits this path up to ~20 times (trump declaration,
+// bidding, and the dealer's sell/keep decision, across up to 4 positive hands), and this test only
+// needs to prove the search-backed decisions integrate correctly into a real game loop end to end
+// (legal actions at every step, correct phase transitions, a valid zero-sum finish) — search
+// *quality* is already covered in isolation by trumpSearch.test.ts.
+const TEST_TRUMP_BUDGET_MS = 25;
+
+/**
+ * Plays one full 10-hand game where every seat's trump declaration, auction bidding, and dealer
+ * sell/keep decision route through Tier 2.5 (`bestTrumpCandidate` + the pure `decide*` functions,
+ * ../src/trumpSearch.ts) instead of through `chooseTrumpDeclaration`/`chooseBid`/
+ * `chooseDealerDecision`/`shouldOpenAuction`'s plain formulas — every seat, not just one, since the
+ * point here is exercising the search-backed decisions across every phase/role a real game visits
+ * (dealer opening or not, multiple bidders in different seats, a dealer who sells vs. one who
+ * doesn't), not isolating a single seat's comparison the way `playFullGame` above does. Card play
+ * stays at "normal" throughout.
+ */
+function playFullGameWithTrumpSearch(ruleSet: GameRules, firstDealer: PlayerIndex, seed: number): GameState {
+  const dealRandom = mulberry32(seed);
+  const searchRandom = mulberry32(seed + 2_000_000_000);
+  let state: GameState = createGame(ruleSet, firstDealer);
+
+  while (state.phase !== "game-complete") {
+    switch (state.phase) {
+      case "awaiting-deal": {
+        const deck = shuffle(createDeck(), dealRandom);
+        state = applyAction(state, { type: "DEAL_HAND", deck });
+        break;
+      }
+      case "trump-selection": {
+        const setup = state.positiveSetup!;
+        const dealerMayOpen = setup.trumpNamer === state.dealer && !setup.auctionOpened;
+        const openAuction =
+          dealerMayOpen &&
+          decideOpenAuction(
+            bestTrumpCandidate(state.hands[state.dealer], state.dealer, state.dealer, state.ruleSet, TEST_TRUMP_BUDGET_MS, searchRandom),
+          );
+        if (openAuction) {
+          state = applyAction(state, { type: "OPEN_AUCTION", player: state.dealer });
+        } else {
+          const best = bestTrumpCandidate(
+            state.hands[setup.trumpNamer],
+            setup.trumpNamer,
+            state.dealer,
+            state.ruleSet,
+            TEST_TRUMP_BUDGET_MS,
+            searchRandom,
+          );
+          const declaration = decideTrumpDeclaration(best);
+          state = applyAction(state, {
+            type: "DECLARE_TRUMP",
+            player: setup.trumpNamer,
+            trump: declaration.trump,
+            direction: declaration.direction,
+            backwards: declaration.backwards,
+          });
+        }
+        break;
+      }
+      case "auction-bidding": {
+        const others = ALL_SEATS.filter((p) => p !== state.dealer);
+        let bidder: PlayerIndex | undefined;
+        let tricks: number | null = null;
+        for (const p of others) {
+          const currentHigh = highestBid(state.positiveSetup?.bids ?? [])?.tricks ?? 0;
+          const best = bestTrumpCandidate(state.hands[p], p, state.dealer, state.ruleSet, TEST_TRUMP_BUDGET_MS, searchRandom);
+          const bid = decideBid(best, currentHigh);
+          if (bid !== null) {
+            bidder = p;
+            tricks = bid;
+            break;
+          }
+        }
+        if (bidder !== undefined && tricks !== null) {
+          state = applyAction(state, { type: "SUBMIT_BID", player: bidder, tricks });
+        } else {
+          const top = highestBid(state.positiveSetup?.bids ?? []);
+          const best = bestTrumpCandidate(
+            state.hands[state.dealer],
+            state.dealer,
+            state.dealer,
+            state.ruleSet,
+            TEST_TRUMP_BUDGET_MS,
+            searchRandom,
+          );
+          state = applyAction(state, {
+            type: "DEALER_DECIDE",
+            player: state.dealer,
+            sell: decideSell(best, top?.tricks ?? null),
+          });
+        }
+        break;
+      }
+      case "playing": {
+        const player = state.currentTurn;
+        state = applyAction(state, { type: "PLAY_CARD", player, card: chooseCard(state, player, "normal") });
+        break;
+      }
+      case "hand-complete": {
+        state = applyAction(state, { type: "ADVANCE_HAND" });
+        break;
+      }
+    }
+  }
+
+  return state;
+}
+
+describe("Tier 2.5 trump/auction search — full games complete validly", () => {
+  it("a full 10-hand game with every trump/bid/dealer-decide routed through the search still reaches game-complete, zero-sum", () => {
+    const ruleSet: GameRules = {
+      mandatoryKilling: true,
+      auctionMustSell: false,
+      playingDownEnabled: true,
+      backwardsEnabled: true,
+      noFaceCardsRedealEnabled: false,
+    };
+
+    const GAMES = 6;
+    for (let i = 0; i < GAMES; i++) {
+      const firstDealer = (i % 4) as PlayerIndex;
+      const game = playFullGameWithTrumpSearch(ruleSet, firstDealer, i * 65537 + 7);
+      expect(game.phase).toBe("game-complete");
+      const total = ALL_SEATS.reduce((sum, seat) => sum + game.cumulativeScores[seat], 0);
+      expect(total).toBe(0);
+    }
+  }, 60_000);
 });

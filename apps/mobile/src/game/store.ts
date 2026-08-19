@@ -52,17 +52,31 @@ function makeBot(difficulty: Difficulty, random: RandomSource): Bot {
       chooseDealerDecision: (s, p) => easyBot.chooseDealerDecision(s, p, random),
     };
   }
-  // "normal"/"hard"/"expert" all share ai-opponent's Tier 1 bidding/trump/dealer-decision logic —
-  // there's no search-based upgrade for those yet (see .claude/skills/king-ai-opponent), only for
-  // card play itself: "normal" gets Tier 1's tracking-aware heuristic, "hard"/"expert" get ISMCTS
-  // at their respective search budgets. `difficulty` flows straight through to ai-opponent's own
-  // chooseCard, which already knows what each of those three means.
+  // "normal" keeps ai-opponent's Tier 1 formula-based bidding/trump/dealer-decision logic
+  // (estimateTricks + trump.ts/auction.ts) untouched, same as it always has.
+  if (difficulty === "normal") {
+    return {
+      chooseCard: (s, p) => aiOpponent.chooseCard(s, p, "normal", random),
+      shouldOpenAuction: aiOpponent.shouldOpenAuction,
+      chooseTrumpDeclaration: aiOpponent.chooseTrumpDeclaration,
+      chooseBid: aiOpponent.chooseBid,
+      chooseDealerDecision: aiOpponent.chooseDealerDecision,
+    };
+  }
+  // "hard"/"expert": card play already used real ISMCTS search (chooseCard's own dispatch). The
+  // once-per-hand decisions — trump declaration, bidding, the dealer's sell/keep call, whether to
+  // open the auction at all — used to fall through to the exact same Tier 1 formula "normal" uses,
+  // which is why Experto never felt meaningfully stronger than Normal outside individual tricks:
+  // round-1 fixes only changed how a bot uses trump once it's already been named, not which trump
+  // gets named or how much gets bid. `ai-opponent`'s `*Search` functions (trumpSearch.ts, Tier
+  // 2.5 — see .claude/skills/king-ai-opponent) replay entire simulated hands to answer those
+  // questions empirically instead, at each difficulty's own budget.
   return {
     chooseCard: (s, p) => aiOpponent.chooseCard(s, p, difficulty, random),
-    shouldOpenAuction: aiOpponent.shouldOpenAuction,
-    chooseTrumpDeclaration: aiOpponent.chooseTrumpDeclaration,
-    chooseBid: aiOpponent.chooseBid,
-    chooseDealerDecision: aiOpponent.chooseDealerDecision,
+    shouldOpenAuction: (s, p) => aiOpponent.shouldOpenAuctionSearch(s, p, difficulty, random),
+    chooseTrumpDeclaration: (s, p) => aiOpponent.chooseTrumpDeclarationSearch(s, p, difficulty, random),
+    chooseBid: (s, p) => aiOpponent.chooseBidSearch(s, p, difficulty, random),
+    chooseDealerDecision: (s, p) => aiOpponent.chooseDealerDecisionSearch(s, p, difficulty, random),
   };
 }
 
@@ -331,6 +345,11 @@ export interface NewGameOptions {
    * real, watchable pace; pass 0 to disable all pacing entirely — for tests driving full games
    * programmatically, not for real play. */
   botDelayMs?: number;
+  /** The human player's own chosen profile avatar (profile/types.ts's `avatarIndex`), if any — kept
+   * out of this game's bot roster draw so the human never shares a portrait with one of their own
+   * opponents that game. `undefined`/`null` draws from the full roster, same as before profiles
+   * existed. */
+  excludeAvatarIndex?: number | null;
 }
 
 export interface GameStore {
@@ -456,7 +475,7 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     difficulty: options.difficulty,
     // Drawn from the same RandomSource as everything else here, not Math.random() directly — so a
     // seeded test gets the same 3 bots every time, same as it gets the same deals.
-    botRosterIndices: pickBotRosterIndices(random, 3),
+    botRosterIndices: pickBotRosterIndices(random, 3, options.excludeAvatarIndex ?? null),
     biddingIndex: 0,
   };
   return buildStore(initial, random, botDelayMs);

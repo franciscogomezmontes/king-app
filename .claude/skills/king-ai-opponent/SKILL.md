@@ -178,6 +178,79 @@ confirmed, not just anticipated, problem.
   `rules-engine` as Tier 1 — never let the bot's internal simulation diverge from the real engine's
   rules, or it will "cheat" by reasoning about illegal lines.
 
+## Tier 2.5 — search-backed trump declaration, bidding, and dealer sell/keep (`trumpSearch.ts`)
+
+Card play itself (`chooseCard`) was difficulty-tiered from the start, but the four *once-per-hand*
+decisions — `chooseTrumpDeclaration`, `chooseBid`, `chooseDealerDecision`, `shouldOpenAuction`
+(`trump.ts`/`auction.ts`) — were not: every difficulty called the exact same `estimateTricks`-based
+formula. This was the actual reason Experto didn't feel meaningfully stronger than Normal outside
+individual tricks — Tier 2's ISMCTS only ever improved *how* a bot plays once trump is already
+named, never *which* trump gets named or how much gets bid. Found live: two Experto screenshots
+that looked like a regression in the Tier 1/ISMCTS negative-hand-leading fix turned out, on
+investigation (a real regression test, not just reading the code), to be a stale build — the fix
+itself was already correct; see this skill's own "prove it, don't assume" testing guidance below,
+which is exactly what caught that.
+
+**Why once-per-hand decisions can afford a much bigger budget than per-card ones.** `ismcts.ts`'s
+`HARD_BUDGET_MS`/`EXPERT_BUDGET_MS` (250-900ms) are spent up to ~130 times in a single game — once
+per card decision. Trump declaration, bidding, and the dealer's sell/keep call together happen at
+most a few times per positive hand, four hands a game — roughly two orders of magnitude less often.
+`HARD_TRUMP_BUDGET_MS` (600ms) and `EXPERT_TRUMP_BUDGET_MS` (2500ms) — `trumpSearch.ts` — spend
+that headroom deliberately: a player would tolerate, and this bot can afford, noticeably more
+thinking time on "what should I even be doing this hand" than on "which of these 2-3 legal cards do
+I play right now."
+
+**The evaluator: play out entire simulated hands, not a static formula.** `bestTrumpCandidate(hand,
+player, dealer, ruleSet, budgetMs, random)` enumerates every real candidate declaration the hand
+could make — no-trump, plus each suit held at least `MIN_HELD_TO_CONSIDER_TRUMP` (3) times, crossed
+with direction (up always, down only if `ruleSet.playingDownEnabled`) and backwards (false always,
+true only if `ruleSet.backwardsEnabled`) — then, round-robin across candidates until `budgetMs`
+elapses (the same deadline-driven shape `ismcts.ts`'s own loop already uses), deals the other three
+seats a uniformly random split of every unseen card (no void/tracking information exists yet at
+trump-declaration time — there's nothing sharper than uniform to determinize with) and plays the
+*entire* hand out via `chooseCardHeuristic` (tracking on) for all four seats, reading the real score
+straight off `handHistory`. The candidate with the best average score wins. This is why it caught
+something a hardcoded rule couldn't: a first attempt at `trumpSearch.test.ts` assumed a short
+ace-king-queen-jack-ten suit would obviously beat a long run of low cards in the same hand — it
+didn't, stably, from 60ms of search all the way to 3000ms (verified directly, not assumed away as
+noise). A 5-card trump suit runs out of trump after 5 tricks; a 7-card one exhausts opponents'
+supply after two leads and then runs every remaining card automatically, including an otherwise
+unrelated side-suit honor run the same hand happened to hold. Trump *length* carries real,
+easy-to-underestimate value that a "longest suit if long enough, else no-trump" formula can't
+weigh against quality the way a full simulation does. Don't assume a "the answer is obvious" test
+scenario without verifying the search actually agrees at a real budget first — see that same test
+file's own regression-test comments for the corrected scenarios (dominant on *both* length and
+quality at once, not pitting the two against each other) this finding forced.
+
+**Deliberately not modeling the auction bid-transfer in the simulation** (`impliedTricks`'s own doc
+comment in `trumpSearch.ts`) — `simulateOnce` always simulates a *direct* declaration, even when
+evaluating a bidder's prospects. Modeling the transfer (a winning bidder's tricks move to the
+dealer's total at scoring time — CLAUDE.md) would be circular for `decideBid` specifically: the
+transfer amount is the bid itself, which is what the simulation's result feeds into computing.
+Treating "how well would this hand do if I directly named trump with it" as a proxy for "how many
+tricks is this hand worth," then converting to a bid the same way a real player mentally estimates
+their hand, is the same order of simplification `estimateTricks` itself already makes.
+
+**Four call sites, hard/expert only** — `chooseTrumpDeclarationSearch`, `shouldOpenAuctionSearch`,
+`chooseBidSearch`, `chooseDealerDecisionSearch` (`trumpSearch.ts`), wired in by
+`apps/mobile/src/game/store.ts`'s `makeBot` for `"hard"`/`"expert"` only. Easy/Normal still call
+`trump.ts`/`auction.ts`'s plain formula functions completely unchanged — those two files have zero
+diff from before this tier existed. The four search-backed entry points share `bestTrumpCandidate`'s
+expensive evaluation but split the *decision* logic out into small, pure functions
+(`decideTrumpDeclaration`, `decideOpenAuction`, `decideBid`, `decideSell`) that take an
+already-evaluated candidate — this is what lets tests exercise real decision logic against a cheap,
+test-scoped search budget (`bestTrumpCandidate(..., TEST_BUDGET_MS, ...)` directly) without a second,
+duplicated copy of the decision logic living in test code, the same reason `ismctsChooseCard` itself
+takes a raw `budgetMs` parameter instead of only being reachable through production-budgeted
+`chooseCard`.
+
+**Tunables** (`trumpSearch.ts`): `HARD_TRUMP_BUDGET_MS`/`EXPERT_TRUMP_BUDGET_MS` (per above),
+`MIN_HELD_TO_CONSIDER_TRUMP` (which suits are even worth spending simulation budget on — a floor on
+what gets *considered*, not a "declare" threshold; whether a merely-3-long suit is actually worth
+declaring is exactly what the simulated averages decide), `AUCTION_THRESHOLD_TRICKS` (mirrors
+`trump.ts`'s own unexported `AUCTION_THRESHOLD`, independently declared since that one isn't
+exported and easy/normal's copy must stay untouched).
+
 ## Testing an AI change
 
 - Regression-test against known hands: given a fixed hand + trick history, assert the bot's chosen

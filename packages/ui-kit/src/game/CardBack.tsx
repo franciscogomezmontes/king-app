@@ -3,12 +3,12 @@ import type { ImageSourcePropType } from "react-native";
 import { colors, radii } from "../theme";
 import { CARD_HEIGHT, CARD_WIDTH } from "./PlayingCard";
 
-export type CardBackStyle = "royal" | "suitMedallion" | "kMonogram" | "artDecoSunburst";
+export type CardBackStyle = "royal" | "medallion" | "laurel" | "sunburst";
 
 /** In display order for a settings picker — the app's real, finished card-back art. Every variant
  * here is a real illustrated image (see .claude/skills/king-ui-modernization); no code-drawn
  * placeholder patterns remain. */
-export const CARD_BACK_STYLES: CardBackStyle[] = ["royal", "suitMedallion", "kMonogram", "artDecoSunburst"];
+export const CARD_BACK_STYLES: CardBackStyle[] = ["royal", "medallion", "laurel", "sunburst"];
 
 // The finished card-back art lives under apps/mobile/assets (not inside this package) because
 // that's where every other app asset lives — ui-kit reaches across that package boundary with a
@@ -17,9 +17,9 @@ export const CARD_BACK_STYLES: CardBackStyle[] = ["royal", "suitMedallion", "kMo
 // is the thing to revisit — copy the art into ui-kit's own assets at that point.
 const CARD_BACK_IMAGES: Record<CardBackStyle, ImageSourcePropType> = {
   royal: require("../../../../apps/mobile/assets/cardbacks/royal.jpg"),
-  suitMedallion: require("../../../../apps/mobile/assets/cardbacks/suit-medallion.jpg"),
-  kMonogram: require("../../../../apps/mobile/assets/cardbacks/k-monogram.jpg"),
-  artDecoSunburst: require("../../../../apps/mobile/assets/cardbacks/art-deco-sunburst.jpg"),
+  medallion: require("../../../../apps/mobile/assets/cardbacks/medallion.jpg"),
+  laurel: require("../../../../apps/mobile/assets/cardbacks/laurel.jpg"),
+  sunburst: require("../../../../apps/mobile/assets/cardbacks/sunburst.jpg"),
 };
 
 export interface CardBackProps {

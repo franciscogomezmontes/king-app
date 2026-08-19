@@ -34,9 +34,14 @@ export const BOT_ROSTER: BotRosterEntry[] = [
  * same `RandomSource` already threaded through store.ts for deck shuffling (never `Math.random()`
  * directly), so bot identity is exercised by the same deterministic-with-a-seed pattern the rest
  * of game-state creation already relies on for tests.
+ *
+ * `excludeIndex` leaves one roster entry out of the draw entirely — the human player's own chosen
+ * profile avatar (see profile/types.ts), if any, so a Solo game never happens to hand a bot the
+ * exact same portrait the human is using for themselves that game. `null` (no profile avatar
+ * chosen yet, or this call site doesn't care) draws from the full roster as before.
  */
-export function pickBotRosterIndices(random: RandomSource, count: number): number[] {
-  const indices = BOT_ROSTER.map((_, i) => i);
+export function pickBotRosterIndices(random: RandomSource, count: number, excludeIndex: number | null = null): number[] {
+  const indices = BOT_ROSTER.map((_, i) => i).filter((i) => i !== excludeIndex);
   for (let i = indices.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     [indices[i], indices[j]] = [indices[j], indices[i]];

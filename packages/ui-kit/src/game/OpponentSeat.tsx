@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
   },
   avatarBadge: {
     position: "absolute",
-    top: -10,
-    right: -10,
+    top: -14,
+    right: -14,
   },
   belowRow: {
     flexDirection: "row",

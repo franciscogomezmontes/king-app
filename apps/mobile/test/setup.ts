@@ -20,8 +20,8 @@ vi.mock("../src/game/botRoster", () => {
     image: 0,
   }));
 
-  function pickBotRosterIndices(random: () => number, count: number): number[] {
-    const indices = BOT_ROSTER.map((_, i) => i);
+  function pickBotRosterIndices(random: () => number, count: number, excludeIndex: number | null = null): number[] {
+    const indices = BOT_ROSTER.map((_, i) => i).filter((i) => i !== excludeIndex);
     for (let i = indices.length - 1; i > 0; i--) {
       const j = Math.floor(random() * (i + 1));
       [indices[i], indices[j]] = [indices[j], indices[i]];

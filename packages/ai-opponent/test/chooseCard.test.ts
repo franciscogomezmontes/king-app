@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   Card,
+  createDeck,
   createGame,
   DEFAULT_GAME_RULES,
   GameState,
@@ -10,6 +11,7 @@ import {
   Trick,
 } from "rules-engine";
 import { chooseCard } from "../src/chooseCard";
+import { chooseCardHeuristic } from "../src/heuristic";
 import { ismctsChooseCard } from "../src/ismcts";
 
 function card(suit: Card["suit"], rank: Card["rank"]): Card {
@@ -162,6 +164,71 @@ describe("chooseCard — negative-hand leading avoids this hand type's own dange
       currentTurn: 0,
     };
     expect(chooseCard(state, 0)).toEqual(card("S", 11));
+  });
+
+  // A second, direct regression test for a live-report scenario (2026-08-17): two fresh Experto
+  // screenshots showed a bot leading a King or Jack as the OPENING lead of a noGentlemen trick —
+  // confirmed an opening lead (not a void discard) by card counts, the leader being the only seat
+  // down a card. Unlike the two scenarios above (an edge case where every non-J/K card is *more*
+  // dangerous by rank, and a fully-forced all-J/K hand), this is a perfectly ordinary 13-card hand
+  // with plenty of genuinely safe low cards sitting right there — the plainest possible case, and
+  // exactly what safeNegativeLeads/excludeDangerousLeads plus ismctsChooseCard's root-candidate
+  // restriction are supposed to prevent regardless of how the danger/safe cards happen to rank
+  // against each other.
+  //
+  // Deliberately NOT the `hands: {0: [...], 1: [], 2: [], 3: []}` shape the two scenarios above
+  // use — that shape is fine for chooseCardHeuristic (which only ever reads the deciding player's
+  // own hand), but it's a self-inconsistent GameState for ismctsChooseCard: determinizeHands has to
+  // redistribute every unseen card (the full deck minus the decider's own hand and whatever's been
+  // played) across the other three seats' `hands[seat].length` targets, and 0/0/0 can't absorb 44
+  // unseen cards. Both scenarios above never actually surfaced that, for a specific reason worth
+  // recording: their hands were crafted small enough (via nonDominatedLeads + excludeDangerousLeads)
+  // that exactly one safe candidate survived the root filter, and ismctsChooseCard short-circuits
+  // on a single root candidate *before* ever calling determinizeHands (see its own `rootCandidates
+  // !== null && rootCandidates.length === 1` early return) — so neither of those tests exercised a
+  // real ISMCTS search over multiple surviving candidates at all. This one deliberately leaves
+  // several safe candidates in play, with a full, self-consistent 13/13/13/13 deal, specifically to
+  // exercise that previously-untested path.
+  function ordinaryHandWithAKingAndAJack(): GameState {
+    const myHand: Card[] = [
+      card("D", 13),
+      card("S", 11),
+      card("H", 9),
+      card("C", 6),
+      card("D", 4),
+      card("S", 8),
+      card("H", 2),
+      card("C", 10),
+      card("D", 7),
+      card("S", 5),
+      card("H", 3),
+      card("C", 12),
+      card("H", 14),
+    ];
+    const mine = new Set(myHand.map((c) => `${c.suit}${c.rank}`));
+    const rest = createDeck().filter((c) => !mine.has(`${c.suit}${c.rank}`));
+    return {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: myHand, 1: rest.slice(0, 13), 2: rest.slice(13, 26), 3: rest.slice(26, 39) },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+  }
+
+  it("chooseCardHeuristic: an ordinary hand with plenty of safe cards never opens with the King or Jack", () => {
+    const led = chooseCardHeuristic(ordinaryHandWithAKingAndAJack(), 0, true);
+    expect(led.rank).not.toBe(11);
+    expect(led.rank).not.toBe(13);
+  });
+
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): an ordinary hand with plenty of safe cards never opens with the King or Jack", () => {
+    for (const budgetMs of [15, 50, 250]) {
+      const led = ismctsChooseCard(ordinaryHandWithAKingAndAJack(), 0, budgetMs, mulberry32(7));
+      expect(led.rank).not.toBe(11);
+      expect(led.rank).not.toBe(13);
+    }
   });
 });
 

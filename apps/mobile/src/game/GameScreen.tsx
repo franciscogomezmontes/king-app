@@ -25,6 +25,7 @@ import {
   typography,
   useTranslation,
 } from "ui-kit";
+import { useProfile } from "../profile/useProfile";
 import { BOT_ROSTER } from "./botRoster";
 import { loadSoloSession, saveSoloSession, clearSoloSession, SoloGameSession } from "./persistence";
 import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, resumeGameStore, pendingDecision } from "./store";
@@ -54,7 +55,8 @@ type Stage =
  * ResumedGame) because the game store is created once on mount from whatever ruleSet is passed
  * in — reading settings after that point could never retroactively apply them. */
 export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
-  const { loading, settings } = useSettings();
+  const { loading: settingsLoading, settings } = useSettings();
+  const { loading: profileLoading, profile } = useProfile();
   const [stage, setStage] = useState<Stage>({ kind: "checking" });
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading || stage.kind === "checking") {
+  if (settingsLoading || profileLoading || stage.kind === "checking") {
     return <SafeAreaView style={styles.container} />;
   }
 
@@ -89,6 +91,8 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
         session={stage.session}
         cardBackStyle={settings.cardBackStyle}
         saveHistoryEnabled={settings.saveHistoryEnabled}
+        profileName={profile.name}
+        profileAvatarIndex={profile.avatarIndex}
         onExit={onExit}
       />
     );
@@ -104,6 +108,8 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       gameRules={settings.gameRules}
       cardBackStyle={settings.cardBackStyle}
       saveHistoryEnabled={settings.saveHistoryEnabled}
+      profileName={profile.name}
+      profileAvatarIndex={profile.avatarIndex}
       onExit={onExit}
     />
   );
@@ -171,18 +177,37 @@ function ActiveGame({
   gameRules,
   cardBackStyle,
   saveHistoryEnabled,
+  profileName,
+  profileAvatarIndex,
   onExit,
 }: {
   difficulty: Difficulty;
   gameRules: GameRules;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  profileName: string;
+  profileAvatarIndex: number | null;
   onExit: () => void;
 }) {
   const [store] = useState<GameStoreHook>(() =>
-    createGameStore({ ruleSet: gameRules, humanSeat: HUMAN_SEAT, difficulty, firstDealer: 0 }),
+    createGameStore({
+      ruleSet: gameRules,
+      humanSeat: HUMAN_SEAT,
+      difficulty,
+      firstDealer: 0,
+      excludeAvatarIndex: profileAvatarIndex,
+    }),
   );
-  return <GameTable store={store} cardBackStyle={cardBackStyle} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />;
+  return (
+    <GameTable
+      store={store}
+      cardBackStyle={cardBackStyle}
+      saveHistoryEnabled={saveHistoryEnabled}
+      profileName={profileName}
+      profileAvatarIndex={profileAvatarIndex}
+      onExit={onExit}
+    />
+  );
 }
 
 /** Constructs a store from a previously-saved in-progress session and renders it — the "resume"
@@ -191,15 +216,28 @@ function ResumedGame({
   session,
   cardBackStyle,
   saveHistoryEnabled,
+  profileName,
+  profileAvatarIndex,
   onExit,
 }: {
   session: SoloGameSession;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  profileName: string;
+  profileAvatarIndex: number | null;
   onExit: () => void;
 }) {
   const [store] = useState<GameStoreHook>(() => resumeGameStore(session));
-  return <GameTable store={store} cardBackStyle={cardBackStyle} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />;
+  return (
+    <GameTable
+      store={store}
+      cardBackStyle={cardBackStyle}
+      saveHistoryEnabled={saveHistoryEnabled}
+      profileName={profileName}
+      profileAvatarIndex={profileAvatarIndex}
+      onExit={onExit}
+    />
+  );
 }
 
 /** The live table — reads everything from an already-constructed `store` (fresh or resumed, it
@@ -209,11 +247,15 @@ function GameTable({
   store,
   cardBackStyle,
   saveHistoryEnabled,
+  profileName,
+  profileAvatarIndex,
   onExit,
 }: {
   store: GameStoreHook;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  profileName: string;
+  profileAvatarIndex: number | null;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -249,7 +291,7 @@ function GameTable({
   const decision = pendingDecision(game, biddingIndex);
   const bots = botRosterIndices.map((index) => BOT_ROSTER[index]);
   const seatLabels: Record<PlayerIndex, string> = {
-    0: t("game:you"),
+    0: profileName.trim().length > 0 ? profileName : t("game:you"),
     1: bots[0].name,
     2: bots[1].name,
     3: bots[2].name,
@@ -259,6 +301,7 @@ function GameTable({
     2: bots[1].image,
     3: bots[2].image,
   };
+  if (profileAvatarIndex !== null) avatarSources[0] = BOT_ROSTER[profileAvatarIndex].image;
 
   if (game.phase === "game-complete") {
     return (

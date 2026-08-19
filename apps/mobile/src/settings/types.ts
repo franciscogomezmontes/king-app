@@ -23,7 +23,12 @@ export const SETTINGS_VERSION = 1 as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
-  cardBackStyle: "royal",
+  // First-run default (per Francisco's request) — a player who's never opened Settings still sees
+  // a deliberately-chosen card back, not just whichever variant happens to be listed first. Once
+  // they pick a different one in Settings, that choice persists (setCardBackStyle/useSettings) and
+  // this default is never consulted again for them. Was "kMonogram" before that variant's rename
+  // to "laurel" (see CardBack.tsx) — same art, same intent, just following the rename.
+  cardBackStyle: "laurel",
   gameRules: DEFAULT_GAME_RULES,
   saveHistoryEnabled: true,
 };

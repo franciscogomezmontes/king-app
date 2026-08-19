@@ -3,8 +3,8 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
 import type { Card, PlayerIndex } from "rules-engine";
 import { colors, fonts, radii, spacing } from "../theme";
+import { Avatar } from "./Avatar";
 import { CardBackStyle } from "./CardBack";
-import { DealerBadge } from "./DealerBadge";
 import { OpponentSeat } from "./OpponentSeat";
 import { CARD_HEIGHT, CARD_WIDTH, FAN_CARD_WIDTH, PlayingCard } from "./PlayingCard";
 import { seatPosition, SeatPosition } from "./seatPosition";
@@ -204,7 +204,14 @@ export function Table({
         {renderOpponent("right")}
       </View>
       <View style={styles.humanPile}>
-        {dealer === humanSeat && <DealerBadge />}
+        <Avatar
+          name={seatLabels[humanSeat]}
+          imageSource={avatarSources?.[humanSeat]}
+          isActive={currentTurn === humanSeat}
+          isDealer={dealer === humanSeat}
+          size="sm"
+          showName={false}
+        />
         <TrickPile count={tricksWon[humanSeat]} />
       </View>
       {lastTrick != null && lastTrick.length > 0 && (
@@ -272,7 +279,9 @@ const styles = StyleSheet.create({
     height: CARD_HEIGHT,
   },
   humanPile: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: spacing.sm,
     marginTop: 4,
   },
   lastTrickCorner: {

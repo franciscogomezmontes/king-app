@@ -5,3 +5,4 @@ export * from "./ismcts";
 export * from "./chooseCard";
 export * from "./trump";
 export * from "./auction";
+export * from "./trumpSearch";

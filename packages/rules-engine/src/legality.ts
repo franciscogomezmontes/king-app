@@ -35,11 +35,15 @@ function wouldBeat(
  * card is legal.
  *
  * "Mandatory Killing" (ruleSet.mandatoryKilling on), per CLAUDE.md: must beat the highest card
- * of the led suit if able; else must trump if able; free play only if void in both. "Beat" is
- * judged against the trick's actual current winner (see `wouldBeat`) — once someone has already
- * trumped the trick, no led-suit follower can beat that regardless of rank, so the obligation
- * degrades to plain follow-suit (any led-suit card is legal) rather than forcing out a needlessly
- * high one that still loses.
+ * of the led suit if able; else must trump if able; free play only if void in both. "Beat"/"trump
+ * if able" are both judged against the trick's actual current winner (see `wouldBeat`), not just
+ * "holds a card of the right suit" — once someone has already trumped the trick, no led-suit
+ * follower can beat that regardless of rank (the obligation degrades to plain follow-suit), and
+ * symmetrically, a player void in the led suit whose own trumps are all lower than a trump
+ * already thrown by an earlier player can't "kill" with any of them either — forcing one out
+ * anyway would waste it for no purpose, so the obligation degrades to free play instead. See this
+ * function's own regression tests for the exact scenarios (Francisco's live bug reports) that
+ * caught each half of this.
  */
 export function legalPlays(
   hand: Card[],
@@ -63,10 +67,19 @@ export function legalPlays(
     return beaters.length > 0 ? beaters : followers;
   }
 
-  // Void in the led suit: must trump if able.
+  // Void in the led suit: must trump if able to actually beat the trick's current winner — the
+  // same "beat" standard as the follow-suit branch above, not merely "holds a card of the trump
+  // suit." A trump that can't overtake what's already in the trick (e.g. every trump in hand is
+  // lower than one an earlier player already threw) isn't a real "kill," so nothing forces it out.
   if (trumpSuit !== null) {
     const trumps = hand.filter((c) => c.suit === trumpSuit);
-    if (trumps.length > 0) return trumps;
+    if (trumps.length > 0) {
+      const beaters = trumps.filter((c) =>
+        wouldBeat(c, cardsPlayedThisTrick, ledSuit, trumpSuit, ruleSet.backwards),
+      );
+      if (beaters.length > 0) return beaters;
+      return hand.slice();
+    }
   }
 
   // Void in both the led suit and trump: free play.

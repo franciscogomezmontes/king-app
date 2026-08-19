@@ -69,3 +69,14 @@ reversed penalty is redistributed to still net to the hand's fixed total).
   that hand at 325, not the table starts at 325 total.
 - Treating "Backwards" as a trump/no-trump choice — it's an independent toggle on top of whatever
   trump decision was already made.
+- Mandatory Killing's "beat"/"trump if able" must be judged against the trick's actual current
+  winner (`legality.ts`'s `wouldBeat`), not just "holds a higher card of the led suit" or "holds
+  any trump." This is one rule with two symmetric failure modes, both caught live by Francisco
+  playing real hands, months apart: (1) a led-suit follower forced to play a needlessly high card
+  of the led suit even though a trump already thrown earlier in the trick had already made that
+  card unable to win regardless of rank; (2) a player void in the led suit forced to throw away a
+  low trump even though every trump they hold is *lower* than a trump an earlier player already
+  threw, so none of them could actually "kill" anything either. Both branches of `legalPlays` now
+  route through the same `wouldBeat` check — see its regression tests in `legality.test.ts` for
+  the exact hands that caught each one. If you touch either branch again, re-verify both
+  directions, not just the one you're changing.

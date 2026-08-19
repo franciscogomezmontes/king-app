@@ -5,6 +5,7 @@
     "version": "0.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
+    "icon": "./assets/icons/icon.png",
     "splash": {
       "backgroundColor": "#0b3d2e"
     },
@@ -13,15 +14,26 @@
       "bundleIdentifier": "com.king.app"
     },
     "android": {
-      "package": "com.king.app"
+      "package": "com.king.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icons/adaptive-icon-foreground.png",
+        "backgroundColor": "#0b3d2e"
+      }
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/icons/icon.png"
     },
     "plugins": [
       "expo-font",
       "expo-localization"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5b0436fc-55c0-4ca6-80df-4f7672915520"
+      }
+    },
+    "owner": "frang_x1"
   }
 }

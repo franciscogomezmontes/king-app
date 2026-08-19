@@ -5,10 +5,12 @@ import { DealerBadge } from "./DealerBadge";
 
 export type AvatarSize = "xs" | "sm" | "md" | "lg";
 
-// "xs" exists specifically for OpponentSeat's compact table context — three of these plus a name
-// stack above each opponent's card-back/trick-pile, on a screen where every extra pixel of height
-// competes with the player's own hand at the bottom (see GameScreen.tsx's layout comment).
-const DIAMETER: Record<AvatarSize, number> = { xs: 32, sm: 40, md: 56, lg: 72 };
+// "sm" is the table-context size — each opponent's corner badge and the human's own seat marker
+// (Table.tsx) — sized as large as the corner-badge layout can hold without overwhelming the
+// card-back it sits on; bumped twice now (32 -> 40 -> 52) chasing "still too small" feedback, each
+// time re-verified against the card-back proportions in OpponentSeat.tsx before landing. "xs" is
+// kept as a smaller option for a future denser context, not used anywhere today.
+const DIAMETER: Record<AvatarSize, number> = { xs: 32, sm: 52, md: 56, lg: 72 };
 const RING_PADDING = 3;
 // Scaling the name label down with the avatar keeps a 3-opponent row from looking top-heavy —
 // "xs"'s tighter marginTop specifically is what claws back the height OpponentSeat needed most.
