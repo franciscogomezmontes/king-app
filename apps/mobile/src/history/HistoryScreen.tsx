@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { PlayerIndex } from "rules-engine";
-import { Button, Scoreboard, Surface, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
+import { BackButton, Button, Scoreboard, Surface, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
 import { clearAllCompletedGames, deleteCompletedGame, loadCompletedGames } from "./persistence";
 import type { CompletedGame } from "./types";
 
@@ -67,12 +67,13 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
           style={styles.scrollContainer}
           contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
         >
+          <View style={styles.header}>
+            <BackButton onPress={() => setSelected(null)} label={t("history:back")} />
+          </View>
           <Text style={styles.title}>{t(`history:modeLabel.${selected.mode}`)}</Text>
           <Text style={styles.date}>{selected.date}</Text>
           <Text style={styles.winnerText}>{winnerLine(t, selected)}</Text>
           <Scoreboard handHistory={selected.handHistory} seatLabels={selected.playerNames} />
-          <Button label={t("history:back")} onPress={() => setSelected(null)} variant="secondary" />
-          <Button label={t("history:backToMenu")} onPress={onExit} variant="ghost" />
         </ScrollView>
       </SafeAreaView>
     );
@@ -84,6 +85,9 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("history:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("history:title")}</Text>
 
         {games !== null && games.length === 0 && <Text style={styles.empty}>{t("history:empty")}</Text>}
@@ -150,8 +154,6 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
             )}
           </>
         )}
-
-        <Button label={t("history:backToMenu")} onPress={onExit} variant="ghost" />
       </ScrollView>
     </SafeAreaView>
   );
@@ -172,6 +174,11 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     alignItems: "center",
+  },
+  header: {
+    width: "100%",
+    marginBottom: spacing.sm,
+    alignItems: "flex-start",
   },
   title: {
     ...typography.title,

@@ -43,4 +43,42 @@ export const APP_RESOURCES = {
       language: "Idioma",
     },
   },
+  fr: {
+    app: {
+      title: "KING",
+      tagline: "Table de club",
+      pitch: "Le King comme on l'a toujours joué",
+      modes: {
+        resumeSolo: "Reprendre la Partie",
+        resumeSoloHint: "Continuez votre partie Solo contre l'Ordinateur non terminée.",
+        scorekeeper: "Marqueur",
+        scorekeeperHint: "Tenez le score d'une table avec des cartes physiques.",
+        solo: "Solo contre l'Ordinateur",
+        soloHint: "Jouez une partie complète contre trois adversaires du club.",
+        online: "En Ligne",
+        onlineHint: "Créez ou rejoignez une partie avec des amis sur le même réseau WiFi.",
+        historyHint: "Chaque partie terminée, physique ou contre l'ordinateur.",
+      },
+      language: "Langue",
+    },
+  },
+  de: {
+    app: {
+      title: "KING",
+      tagline: "Klubtisch",
+      pitch: "King, wie man es schon immer gespielt hat",
+      modes: {
+        resumeSolo: "Spiel Fortsetzen",
+        resumeSoloHint: "Setze dein unvollendetes Spiel Solo gegen den Computer fort.",
+        scorekeeper: "Punktezähler",
+        scorekeeperHint: "Führe die Punkte für einen Tisch mit physischen Karten.",
+        solo: "Solo gegen den Computer",
+        soloHint: "Spiele eine komplette Partie gegen drei Klubgegner.",
+        online: "Online",
+        onlineHint: "Erstelle oder tritt einem Spiel mit Freunden im selben WLAN bei.",
+        historyHint: "Jedes beendete Spiel, physisch oder gegen den Computer.",
+      },
+      language: "Sprache",
+    },
+  },
 };

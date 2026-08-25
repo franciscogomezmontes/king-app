@@ -43,6 +43,26 @@ export function initI18n() {
         ...HOW_TO_PLAY_RESOURCES.es,
         ...PROFILE_RESOURCES.es,
       },
+      fr: {
+        ...APP_RESOURCES.fr,
+        ...GAME_RESOURCES.fr,
+        ...SCOREKEEPER_RESOURCES.fr,
+        ...HISTORY_RESOURCES.fr,
+        ...SETTINGS_RESOURCES.fr,
+        ...ONLINE_RESOURCES.fr,
+        ...HOW_TO_PLAY_RESOURCES.fr,
+        ...PROFILE_RESOURCES.fr,
+      },
+      de: {
+        ...APP_RESOURCES.de,
+        ...GAME_RESOURCES.de,
+        ...SCOREKEEPER_RESOURCES.de,
+        ...HISTORY_RESOURCES.de,
+        ...SETTINGS_RESOURCES.de,
+        ...ONLINE_RESOURCES.de,
+        ...HOW_TO_PLAY_RESOURCES.de,
+        ...PROFILE_RESOURCES.de,
+      },
     },
   });
 }

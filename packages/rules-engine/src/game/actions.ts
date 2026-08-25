@@ -1,6 +1,6 @@
 import { highestBid, resolveAuction } from "../auction";
 import { deal } from "../deck";
-import { canLeadHearts, legalPlays } from "../legality";
+import { canLeadHearts, legalPlays, wouldBeat } from "../legality";
 import { scoreNegativeHand, scorePositiveHand } from "../scoring";
 import { resolveTrick } from "../trick";
 import { Card, DEFAULT_RULE_SET, HandResult, NegativeHandType, PlayerIndex, RuleSet, Trick, TrumpSuit } from "../types";
@@ -283,6 +283,51 @@ export function legalCardsFor(state: GameState, player: PlayerIndex): Card[] {
     legal = legal.filter((c) => c.suit !== "H");
   }
   return legal;
+}
+
+/** Why a specific card is currently illegal for `player` — mirrors `legalCardsFor`'s own branches
+ * exactly rather than re-deriving legality independently, so the two can never disagree. `null`
+ * means the card is actually legal (or not in `player`'s hand at all). Built for a UI surface that
+ * shows every card as tappable and explains an illegal tap on demand (see apps/mobile's Expert-
+ * difficulty table) instead of graying illegal cards out — the reason still has to come from here,
+ * never re-derived in UI code, per CLAUDE.md principle 1. */
+export type IllegalPlayReason = "must-follow-suit" | "must-beat" | "must-trump" | "hearts-locked";
+
+export function illegalPlayReason(state: GameState, player: PlayerIndex, card: Card): IllegalPlayReason | null {
+  const trumpSuit = currentTrumpSuit(state);
+  const ruleSet = currentRuleSet(state);
+  const hand = state.hands[player];
+  const cardsPlayedThisTrick = state.currentTrick.map((p) => p.card);
+  const ledSuit = cardsPlayedThisTrick.length > 0 ? cardsPlayedThisTrick[0].suit : null;
+
+  if (ledSuit === null) {
+    const leadingHeartsLocked =
+      (state.handType === "noHearts" || state.handType === "noKingOfHearts") &&
+      card.suit === "H" &&
+      !canLeadHearts(hand);
+    return leadingHeartsLocked ? "hearts-locked" : null;
+  }
+
+  const followers = hand.filter((c) => c.suit === ledSuit);
+
+  if (card.suit === ledSuit) {
+    if (!ruleSet.mandatoryKilling) return null;
+    const beaters = followers.filter((c) => wouldBeat(c, cardsPlayedThisTrick, ledSuit, trumpSuit, ruleSet.backwards));
+    if (beaters.length === 0) return null;
+    return beaters.some((c) => sameCard(c, card)) ? null : "must-beat";
+  }
+
+  if (followers.length > 0) return "must-follow-suit";
+
+  if (ruleSet.mandatoryKilling && trumpSuit !== null) {
+    const trumps = hand.filter((c) => c.suit === trumpSuit);
+    const beaters = trumps.filter((c) => wouldBeat(c, cardsPlayedThisTrick, ledSuit, trumpSuit, ruleSet.backwards));
+    if (beaters.length > 0) {
+      return beaters.some((c) => sameCard(c, card)) ? null : "must-trump";
+    }
+  }
+
+  return null;
 }
 
 /**

@@ -19,11 +19,16 @@ describe("resolveSupportedLocale", () => {
   });
 
   it("picks the first supported tag in an ordered preference list", () => {
-    expect(resolveSupportedLocale(["fr-FR", "es-MX", "en-US"])).toBe("es");
+    expect(resolveSupportedLocale(["it-IT", "es-MX", "en-US"])).toBe("es");
+  });
+
+  it("now also supports French and German directly", () => {
+    expect(resolveSupportedLocale(["fr-FR"])).toBe("fr");
+    expect(resolveSupportedLocale(["de-DE"])).toBe("de");
   });
 
   it("falls back to DEFAULT_LOCALE when nothing is supported", () => {
-    expect(resolveSupportedLocale(["fr-FR", "de-DE"])).toBe(DEFAULT_LOCALE);
+    expect(resolveSupportedLocale(["it-IT", "pt-BR"])).toBe(DEFAULT_LOCALE);
     expect(resolveSupportedLocale([])).toBe(DEFAULT_LOCALE);
   });
 });

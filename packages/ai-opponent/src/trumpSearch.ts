@@ -211,10 +211,17 @@ export function impliedTricks(candidate: TrumpCandidate, averageScore: number): 
   return candidate.direction === "up" ? averageScore / 25 : (325 - averageScore) / 75;
 }
 
-// Below this implied-trick estimate, the dealer sells rather than naming trump themselves — same
-// threshold value as `trump.ts`'s own (unexported, so independently declared here)
-// `AUCTION_THRESHOLD`, just evaluated against a simulated rather than formula-based estimate.
-const AUCTION_THRESHOLD_TRICKS = 3;
+// Below this implied-trick estimate, the dealer opens the auction rather than naming trump
+// themselves outright — same two-value split as `trump.ts`'s own (unexported, so independently
+// declared here) `AUCTION_THRESHOLD_NOT_FORCED`/`AUCTION_THRESHOLD_FORCED_SELL`, just evaluated
+// against a simulated rather than formula-based estimate. See that file's doc comment for why the
+// threshold differs by `ruleSet.auctionMustSell`.
+const AUCTION_THRESHOLD_TRICKS_NOT_FORCED = 6;
+const AUCTION_THRESHOLD_TRICKS_FORCED_SELL = 3;
+
+/** Bids/asks a real bidder should stay comfortably below their own point-estimate of what they can
+ * deliver — see `decideBid`'s own doc comment for the EV reasoning. Tricks, not points. */
+const BID_MARGIN = 2;
 
 /**
  * The four once-per-hand decisions, as pure functions over an *already-evaluated* candidate (see
@@ -228,16 +235,31 @@ export function decideTrumpDeclaration(best: EvaluatedTrumpCandidate): TrumpDecl
   return { trump: best.trump, direction: best.direction, backwards: best.backwards };
 }
 
-export function decideOpenAuction(best: EvaluatedTrumpCandidate): boolean {
-  return impliedTricks(best, best.averageScore) < AUCTION_THRESHOLD_TRICKS;
+/**
+ * Should the dealer open this hand up to auction rather than naming trump outright? Opening is a
+ * free option when `auctionMustSell` is off — `resolveDealerDecision` (rules-engine) lets the
+ * dealer decline any bid and falls back to naming trump themselves exactly as if they'd never
+ * opened — so a rational dealer should open far more readily in that case, reserving "don't even
+ * bother" for a hand strong enough that no realistic bid would beat it anyway. When
+ * `auctionMustSell` is on, opening commits to selling to the highest bid if one comes in, so the
+ * threshold stays cautious.
+ */
+export function decideOpenAuction(best: EvaluatedTrumpCandidate, auctionMustSell: boolean): boolean {
+  const threshold = auctionMustSell ? AUCTION_THRESHOLD_TRICKS_FORCED_SELL : AUCTION_THRESHOLD_TRICKS_NOT_FORCED;
+  return impliedTricks(best, best.averageScore) < threshold;
 }
 
-/** Bids the *floor* of the implied-tricks estimate rather than the nearest-rounded value — a
- * deliberately conservative rounding (never rounds an optimistic estimate up into a bid it doesn't
- * fully support), consistent with the real-table underbidding norms `estimateTricks` was itself
- * recalibrated toward (see .claude/skills/king-ai-opponent). */
+/**
+ * Bids a margin below the floored implied-tricks estimate, not the estimate itself. A winning
+ * bid nets the bidder `(actual_tricks - bid) * 25` at scoring time (see `applyAuctionTransfer`) —
+ * bidding your own true expectation is an ~0-EV move by construction (deliver exactly what you
+ * bid and you net nothing, handing the dealer the hand's entire value via the transfer), so a
+ * bidder needs to bid meaningfully below their estimate to leave themselves real expected upside.
+ * `BID_MARGIN` tricks of headroom, consistent with the real-table underbidding norms
+ * `estimateTricks` was itself recalibrated toward (see .claude/skills/king-ai-opponent).
+ */
 export function decideBid(best: EvaluatedTrumpCandidate, currentHighBid: number): number | null {
-  const estimate = Math.max(0, Math.floor(impliedTricks(best, best.averageScore)));
+  const estimate = Math.max(0, Math.floor(impliedTricks(best, best.averageScore)) - BID_MARGIN);
   return estimate > currentHighBid ? estimate : null;
 }
 
@@ -289,7 +311,7 @@ export function shouldOpenAuctionSearch(
   random: RandomSource = Math.random,
 ): boolean {
   const best = bestTrumpCandidate(state.hands[dealer], dealer, dealer, state.ruleSet, budgetFor(difficulty), random);
-  return decideOpenAuction(best);
+  return decideOpenAuction(best, state.ruleSet.auctionMustSell);
 }
 
 /** Search-backed version of `chooseBid` for Difícil/Experto: simulate the bidder's own best

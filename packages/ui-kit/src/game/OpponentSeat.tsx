@@ -21,8 +21,10 @@ export interface OpponentSeatProps {
 }
 
 // An opponent's own hidden hand is secondary information, not a card in play — a bit smaller than
-// the table-cluster's own "table"-face cards, freeing up vertical room overall.
-const CARD_BACK_SCALE = 0.82;
+// the table-cluster's own "table"-face cards, freeing up vertical room overall. Bumped 0.82 -> 0.95
+// once Phase 6's trick-cluster shrink (see Table.tsx's own TRICK_CARD_SCALE) freed enough vertical
+// room to spend some of it back here — per Francisco's "aun tenemos espacio" feedback.
+const CARD_BACK_SCALE = 0.95;
 
 /** An opponent's seat: name, a face-down card-back with their avatar overlaid as a corner badge
  * (rather than a separate stacked portrait above it — see Francisco's "aprovechar mejor el
@@ -62,25 +64,29 @@ const styles = StyleSheet.create({
   container: {
     alignItems: "center",
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: 2,
   },
   name: {
     color: colors.cream,
     fontFamily: fonts.bodySemi,
-    fontSize: 12,
+    fontSize: 13,
     maxWidth: 90,
-    marginBottom: 2,
+    marginBottom: 4,
+    // Nudges the centered name block left of the card-back's own center — the bigger avatar
+    // badge (see CARD_BACK_SCALE/avatarBadge below) now overhangs the card's top-right corner far
+    // enough to sit under a name that's dead-centered above it, per Francisco's report.
+    marginRight: 16,
   },
   nameActive: {
     color: colors.gold,
   },
   cardBackWrap: {
-    marginTop: 6,
+    marginTop: 4,
   },
   avatarBadge: {
     position: "absolute",
     top: -14,
-    right: -14,
+    right: -10,
   },
   belowRow: {
     flexDirection: "row",

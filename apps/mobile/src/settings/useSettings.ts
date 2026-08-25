@@ -11,6 +11,7 @@ export interface UseSettingsResult {
   setCardBackStyle: (style: CardBackStyle) => void;
   setGameRule: (key: keyof GameRules, value: boolean) => void;
   setSaveHistoryEnabled: (value: boolean) => void;
+  setShowScoreSummary: (value: boolean) => void;
 }
 
 /** Owns the player's cross-mode preferences (card back style, the game-setup rules menu) and
@@ -58,5 +59,13 @@ export function useSettings(): UseSettingsResult {
     });
   }
 
-  return { loading, settings, setCardBackStyle, setGameRule, setSaveHistoryEnabled };
+  function setShowScoreSummary(showScoreSummary: boolean) {
+    setSettings((prev) => {
+      const next: Settings = { ...prev, showScoreSummary };
+      saveSettings(next);
+      return next;
+    });
+  }
+
+  return { loading, settings, setCardBackStyle, setGameRule, setSaveHistoryEnabled, setShowScoreSummary };
 }

@@ -11,7 +11,7 @@ import { Card, DEFAULT_RULE_SET, RuleSet, Suit, TrumpSuit } from "./types";
  * already have been thrown by an earlier player) could force a *higher* led-suit card into a
  * trick a trump had already made unwinnable, when any legal follower would do.
  */
-function wouldBeat(
+export function wouldBeat(
   candidate: Card,
   cardsPlayedThisTrick: Card[],
   ledSuit: Suit,

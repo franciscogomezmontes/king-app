@@ -4,6 +4,7 @@ import {
   advanceHand,
   declareTrump,
   dealHand,
+  illegalPlayReason,
   legalCardsFor,
   openAuction,
   playCard,
@@ -309,6 +310,83 @@ describe("resolveDealerDecision", () => {
 
   it("throws if not decided by the dealer", () => {
     expect(() => resolveDealerDecision(withBids(), 1, true)).toThrow();
+  });
+});
+
+describe("illegalPlayReason", () => {
+  it("must-follow-suit: holding a led-suit card but attempting to play a different suit", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noTricks",
+      hands: { 0: [], 1: [{ suit: "H", rank: 5 }, { suit: "S", rank: 9 }], 2: [], 3: [] },
+      currentTrick: [{ player: 0, card: { suit: "S", rank: 2 } }],
+    };
+    expect(illegalPlayReason(state, 1, { suit: "H", rank: 5 })).toBe("must-follow-suit");
+    expect(illegalPlayReason(state, 1, { suit: "S", rank: 9 })).toBeNull(); // the follower itself is legal
+  });
+
+  it("must-beat: Mandatory Killing on, holds a led-suit card that beats and one that doesn't", () => {
+    const state: GameState = withPositiveHand(
+      {
+        ...createGame(rulesWith({ mandatoryKilling: true }), 0),
+        phase: "playing",
+        handType: "positive",
+        hands: { 0: [], 1: [{ suit: "S", rank: 3 }, { suit: "S", rank: 9 }], 2: [], 3: [] },
+        currentTrick: [{ player: 0, card: { suit: "S", rank: 7 } }],
+      },
+      { trump: null },
+    );
+    expect(illegalPlayReason(state, 1, { suit: "S", rank: 3 })).toBe("must-beat"); // doesn't beat S7
+    expect(illegalPlayReason(state, 1, { suit: "S", rank: 9 })).toBeNull(); // beats S7
+  });
+
+  it("must-trump: Mandatory Killing on, void in the led suit, holds a trump that beats and one that doesn't (a trump was already thrown)", () => {
+    const state: GameState = withPositiveHand(
+      {
+        ...createGame(rulesWith({ mandatoryKilling: true }), 0),
+        phase: "playing",
+        handType: "positive",
+        hands: {
+          0: [],
+          2: [{ suit: "H", rank: 2 }, { suit: "H", rank: 9 }, { suit: "C", rank: 5 }],
+          1: [],
+          3: [],
+        },
+        currentTrick: [
+          { player: 0, card: { suit: "S", rank: 7 } },
+          { player: 3, card: { suit: "H", rank: 4 } }, // already trumped
+        ],
+      },
+      { trump: "H" },
+    );
+    expect(illegalPlayReason(state, 2, { suit: "H", rank: 2 })).toBe("must-trump"); // H4 already beats H2
+    expect(illegalPlayReason(state, 2, { suit: "C", rank: 5 })).toBe("must-trump"); // a real beater (H9) exists
+    expect(illegalPlayReason(state, 2, { suit: "H", rank: 9 })).toBeNull(); // beats H4
+  });
+
+  it("hearts-locked: leading a hand where hearts may only be led once they're all that's left", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noHearts",
+      hands: { 0: [], 1: [{ suit: "H", rank: 5 }, { suit: "S", rank: 9 }], 2: [], 3: [] },
+      currentTrick: [],
+    };
+    expect(illegalPlayReason(state, 1, { suit: "H", rank: 5 })).toBe("hearts-locked");
+    expect(illegalPlayReason(state, 1, { suit: "S", rank: 9 })).toBeNull();
+  });
+
+  it("returns null for a card that's actually legal under a plain follow-suit-only hand", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noTricks",
+      hands: { 0: [], 1: [{ suit: "H", rank: 5 }], 2: [], 3: [] },
+      currentTrick: [{ player: 0, card: { suit: "S", rank: 2 } }],
+    };
+    // Void in the led suit, Mandatory Killing off — free play.
+    expect(illegalPlayReason(state, 1, { suit: "H", rank: 5 })).toBeNull();
   });
 });
 

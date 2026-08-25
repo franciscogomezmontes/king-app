@@ -81,4 +81,80 @@ export const ONLINE_RESOURCES = {
       leaveRoom: "Salir de la Sala",
     },
   },
+  fr: {
+    online: {
+      title: "En Ligne",
+      connecting: "Connexion…",
+      modeChoice: {
+        host: "Héberger une Partie",
+        join: "Rejoindre une Partie",
+      },
+      displayName: {
+        label: "Ton Nom",
+        placeholder: "Ton Nom",
+      },
+      serverAddress: {
+        label: "Adresse du Serveur",
+        placeholder: "192.168.1.42:2567",
+        hint: "Demande l'adresse à ton hôte — tout le monde doit être sur le même réseau WiFi.",
+      },
+      roomCode: {
+        label: "Code de la Salle",
+        placeholder: "ABCDE",
+      },
+      create: {
+        button: "Créer la Salle",
+      },
+      join: {
+        button: "Rejoindre la Salle",
+      },
+      waiting: {
+        title: "En attente de joueurs",
+        shareHint: "Partage ce code avec les autres joueurs.",
+        you: "Toi",
+        seat: "Place {{number}}",
+        empty: "En attente…",
+      },
+      disconnected: "Déconnecté : {{names}}",
+      leaveRoom: "Quitter la Salle",
+    },
+  },
+  de: {
+    online: {
+      title: "Online",
+      connecting: "Verbinde…",
+      modeChoice: {
+        host: "Spiel Hosten",
+        join: "Spiel Beitreten",
+      },
+      displayName: {
+        label: "Dein Name",
+        placeholder: "Dein Name",
+      },
+      serverAddress: {
+        label: "Serveradresse",
+        placeholder: "192.168.1.42:2567",
+        hint: "Frag deinen Host nach der Adresse — alle müssen im selben WLAN sein.",
+      },
+      roomCode: {
+        label: "Raumcode",
+        placeholder: "ABCDE",
+      },
+      create: {
+        button: "Raum Erstellen",
+      },
+      join: {
+        button: "Raum Beitreten",
+      },
+      waiting: {
+        title: "Warte auf Spieler",
+        shareHint: "Teile diesen Code mit den anderen Spielern.",
+        you: "Du",
+        seat: "Platz {{number}}",
+        empty: "Warte…",
+      },
+      disconnected: "Getrennt: {{names}}",
+      leaveRoom: "Raum Verlassen",
+    },
+  },
 };

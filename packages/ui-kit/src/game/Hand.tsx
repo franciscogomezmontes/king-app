@@ -68,15 +68,26 @@ export interface HandProps {
   legalCards: Card[];
   onPlay: (card: Card) => void;
   interactive: boolean;
+  /** Expert-difficulty mode (per Francisco's request): every card in the hand shows and behaves
+   * as if it were playable — no dimming, no gold "this one's legal" hint — since a real
+   * experienced player has to know the rules rather than be shown them. Tapping an actual illegal
+   * card doesn't play it; it calls `onIllegalTap` instead so the caller can explain why. Defaults
+   * to false (today's behavior: illegal cards are visibly dimmed and non-interactive). */
+  explainIllegal?: boolean;
+  /** Called instead of `onPlay` when `explainIllegal` is on and the tapped card isn't actually
+   * legal right now. Omit only if `explainIllegal` is never true. */
+  onIllegalTap?: (card: Card) => void;
 }
 
 /**
  * The player's own hand — always a single row, arced like a real fanned hand of cards, sized as
  * large as the actually-measured available width allows (see `computeLayout`) rather than a fixed
  * small size. Each card shows only its top-left index (`face="fan"`) so overlapping neighbors
- * don't turn pip faces into noise. Legal cards lift further still and get a gold edge.
+ * don't turn pip faces into noise. Legal cards lift further still and get a gold edge — unless
+ * `explainIllegal` is on, in which case every card gets that treatment uniformly (see its own doc
+ * comment above).
  */
-export function Hand({ cards, legalCards, onPlay, interactive }: HandProps) {
+export function Hand({ cards, legalCards, onPlay, interactive, explainIllegal = false, onIllegalTap }: HandProps) {
   const [containerWidth, setContainerWidth] = useState(0);
   const sorted = sortForDisplay(cards);
   const { scale, sliver } = computeLayout(sorted.length, containerWidth);
@@ -90,11 +101,20 @@ export function Hand({ cards, legalCards, onPlay, interactive }: HandProps) {
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
       <View
-        style={[styles.row, !interactive && styles.waiting, { minHeight: FAN_CARD_HEIGHT * MAX_SCALE + ARC_LIFT + SELECT_LIFT }]}
+        // Reserves room for the *actual* computed `scale`, not always `MAX_SCALE` — a full 13-card
+        // hand (the common case exactly when screen space is tightest, at the start of a hand)
+        // renders at a scale well below MAX_SCALE, so a fixed MAX_SCALE reservation wasted real
+        // vertical space nobody was using yet. The row's height still grows smoothly as `scale`
+        // itself grows late in the hand (fewer cards, bigger fan) — no different from any other
+        // scale-dependent layout in this app.
+        style={[styles.row, !interactive && styles.waiting, { minHeight: FAN_CARD_HEIGHT * scale + ARC_LIFT + SELECT_LIFT }]}
       >
         {sorted.map((card, index) => {
           const isLegal = legalCards.some((c) => sameCard(c, card));
-          const canPlay = interactive && isLegal;
+          // In explainIllegal mode every card looks and lifts the same — the whole point is not
+          // hinting which ones are actually legal — but only a genuinely legal tap plays the card;
+          // an illegal one reports itself via onIllegalTap instead of being un-tappable.
+          const canPlay = interactive && (explainIllegal || isLegal);
           // t ranges roughly [-1, 1] across the hand, 0 at the center — same normalized position
           // drives both the outward rotation and the arc's parabolic lift.
           const t = center === 0 ? 0 : (index - center) / center;
@@ -115,7 +135,7 @@ export function Hand({ cards, legalCards, onPlay, interactive }: HandProps) {
                 scale={scale}
                 disabled={!canPlay}
                 highlighted={canPlay}
-                onPress={canPlay ? () => onPlay(card) : undefined}
+                onPress={canPlay ? () => (isLegal ? onPlay(card) : onIllegalTap?.(card)) : undefined}
               />
             </View>
           );

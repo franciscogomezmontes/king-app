@@ -1,6 +1,6 @@
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
+import { BackButton, colors, fonts, layout, spacing, typography, useTranslation } from "ui-kit";
 
 export interface HowToPlayScreenProps {
   onExit: () => void;
@@ -19,6 +19,9 @@ export function HowToPlayScreen({ onExit }: HowToPlayScreenProps) {
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("howToPlay:backToSettings")} />
+        </View>
         <Text style={styles.title}>{t("howToPlay:title")}</Text>
         <Text style={styles.paragraph}>{t("howToPlay:intro")}</Text>
         <Text style={styles.paragraph}>{t("howToPlay:basics")}</Text>
@@ -39,8 +42,6 @@ export function HowToPlayScreen({ onExit }: HowToPlayScreenProps) {
 
         <Text style={styles.paragraph}>{t("howToPlay:winning")}</Text>
         <Text style={styles.paragraph}>{t("howToPlay:outro")}</Text>
-
-        <Button label={t("howToPlay:backToSettings")} onPress={onExit} variant="ghost" style={styles.backButton} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -62,6 +63,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     alignItems: "stretch",
     paddingBottom: spacing.xl,
+  },
+  header: {
+    width: "100%",
+    marginBottom: spacing.sm,
+    alignItems: "flex-start",
   },
   title: {
     ...typography.title,
@@ -91,9 +97,5 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: colors.cream,
     marginBottom: spacing.xs,
-  },
-  backButton: {
-    marginTop: spacing.md,
-    alignSelf: "center",
   },
 });

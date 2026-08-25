@@ -65,22 +65,26 @@ export const typography = {
     lineHeight: 28,
     color: colors.cream,
   },
+  // Bumped a size step (per Francisco's "el tamaño de la letra está muy pequeño" feedback) now
+  // that hiding the score-summary bars by default and tightening the table layout (see Table.tsx/
+  // OpponentSeat.tsx) freed real vertical room to spend on it — verified this doesn't reintroduce
+  // the scroll that tightening pass just fixed (see the Playwright checks run alongside it).
   body: {
     fontFamily: fonts.body,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 21,
     color: colors.secondaryText,
   },
   label: {
     fontFamily: fonts.bodySemi,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     color: colors.cream,
   },
   caption: {
     fontFamily: fonts.body,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     color: colors.muted,
   },
 } as const;

@@ -27,8 +27,11 @@ function stateWithBids(hand: Card[], bids: AuctionBid[]): GameState {
 }
 
 describe("chooseBid", () => {
-  it("bids its hand estimate when it exceeds the current high bid", () => {
-    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(3);
+  it("bids BID_MARGIN below its hand estimate, not the estimate itself, when that still exceeds the current high bid", () => {
+    // strongHand's estimateTricks is 3 (see its own comment above); a winning bid nets
+    // (actual - bid) * 25 at scoring time, so bidding the raw estimate is an ~0-EV move by
+    // construction — see BID_MARGIN's doc comment in auction.ts.
+    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(1);
   });
 
   it("declines when its estimate doesn't exceed the current high bid", () => {

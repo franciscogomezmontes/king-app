@@ -33,4 +33,34 @@ export const PROFILE_RESOURCES = {
       },
     },
   },
+  fr: {
+    profile: {
+      title: "Profil",
+      backToMenu: "Retour au Menu",
+      name: {
+        label: "Ton Nom",
+        placeholder: "Entre ton nom",
+        hint: "Affiché à la table à la place de « Toi » une fois configuré.",
+      },
+      avatar: {
+        title: "Ton Avatar",
+        hint: "Choisis un portrait pour toi — la même galerie dont proviennent tes adversaires, donc ta propre partie n'attribue jamais ce même portrait à un robot.",
+      },
+    },
+  },
+  de: {
+    profile: {
+      title: "Profil",
+      backToMenu: "Zurück zum Menü",
+      name: {
+        label: "Dein Name",
+        placeholder: "Gib deinen Namen ein",
+        hint: "Wird am Tisch anstelle von „Du“ angezeigt, sobald festgelegt.",
+      },
+      avatar: {
+        title: "Dein Avatar",
+        hint: "Wähle ein Porträt für dich — dieselbe Galerie, aus der auch deine Computergegner stammen, sodass dein eigenes Spiel dasselbe Porträt nie einem Bot zuweist.",
+      },
+    },
+  },
 };

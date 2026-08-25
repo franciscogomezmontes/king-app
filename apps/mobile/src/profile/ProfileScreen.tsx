@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Avatar, Button, Surface, colors, fonts, layout, radii, spacing, typography, useTranslation } from "ui-kit";
+import { Avatar, BackButton, Surface, colors, fonts, layout, radii, spacing, typography, useTranslation } from "ui-kit";
 import { BOT_ROSTER } from "../game/botRoster";
 import { useProfile } from "./useProfile";
 
@@ -22,6 +22,9 @@ export function ProfileScreen({ onExit }: ProfileScreenProps) {
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("profile:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("profile:title")}</Text>
 
         <Text style={styles.sectionTitle}>{t("profile:name.label")}</Text>
@@ -50,8 +53,6 @@ export function ProfileScreen({ onExit }: ProfileScreenProps) {
             );
           })}
         </View>
-
-        <Button label={t("profile:backToMenu")} onPress={onExit} variant="ghost" style={styles.backButton} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -73,6 +74,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     alignItems: "center",
     paddingBottom: spacing.xl,
+  },
+  header: {
+    width: "100%",
+    marginBottom: spacing.sm,
+    alignItems: "flex-start",
   },
   title: {
     ...typography.displayMd,
@@ -118,8 +124,5 @@ const styles = StyleSheet.create({
   avatarCardSelected: {
     borderColor: colors.gold,
     borderWidth: 2,
-  },
-  backButton: {
-    marginTop: spacing.sm,
   },
 });

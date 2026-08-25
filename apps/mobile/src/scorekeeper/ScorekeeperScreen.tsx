@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, View } fro
 import { SafeAreaView } from "react-native-safe-area-context";
 import { HandType, NEGATIVE_HAND_EXPECTED_COUNT, PlayerIndex, POSITIVE_HAND_EXPECTED_TRICKS, validateHandCounts } from "rules-engine";
 import {
+  BackButton,
   Button,
   HandCountField,
   Scoreboard,
@@ -240,11 +241,13 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+          <View style={styles.header}>
+            <BackButton onPress={onExit} label={t("scorekeeper:backToMenu")} />
+          </View>
           <Text style={styles.title}>{t("scorekeeper:gameOver")}</Text>
           <Text style={styles.winnerText}>{winnerLine}</Text>
           <Scoreboard handHistory={toScoreboardEntries(state)} seatLabels={labels} onSelectHand={startEdit} />
           <Button label={t("scorekeeper:newGame")} onPress={startNew} />
-          <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" />
         </View>
       </SafeAreaView>
     );
@@ -263,6 +266,9 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+          <View style={styles.header}>
+            <BackButton onPress={onExit} label={t("scorekeeper:backToMenu")} />
+          </View>
           <Text style={styles.title}>{t("scorekeeper:setup.title")}</Text>
 
           <View style={styles.setupField}>
@@ -293,7 +299,6 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
           <Text style={styles.setupHint}>{t("scorekeeper:setup.namesHint")}</Text>
 
           <Button label={t("scorekeeper:setup.start")} onPress={() => setSetupDismissed(true)} />
-          <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" />
         </View>
       </SafeAreaView>
     );
@@ -309,7 +314,7 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
       >
         <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
           <View style={styles.header}>
-            <Button label={t("scorekeeper:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
+            <BackButton onPress={onExit} label={t("scorekeeper:backToMenu")} />
           </View>
 
           <View style={styles.boardArea}>
@@ -391,11 +396,6 @@ const styles = StyleSheet.create({
     width: "100%",
     marginBottom: spacing.sm,
     alignItems: "flex-start",
-  },
-  headerLink: {
-    minWidth: 0,
-    paddingHorizontal: 0,
-    alignSelf: "flex-start",
   },
   // Takes all the vertical space the entry bar below doesn't need — the results table scrolls
   // within this area while the entry bar itself never moves, per the family's request to always

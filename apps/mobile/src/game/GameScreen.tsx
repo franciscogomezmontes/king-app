@@ -2,11 +2,23 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { ImageSourcePropType } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { canRequestRedeal, GameRules, GameState, highestBid, legalCardsFor, PlayerIndex, SUITS } from "rules-engine";
+import {
+  canRequestRedeal,
+  Card,
+  GameRules,
+  GameState,
+  highestBid,
+  IllegalPlayReason,
+  illegalPlayReason,
+  legalCardsFor,
+  PlayerIndex,
+  SUITS,
+} from "rules-engine";
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
 import {
   AuctionSummary,
+  BackButton,
   Button,
   CardBackStyle,
   Hand,
@@ -17,6 +29,7 @@ import {
   SUIT_SYMBOLS,
   Switch,
   Table,
+  Toast,
   colors,
   fonts,
   layout,
@@ -91,6 +104,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
         session={stage.session}
         cardBackStyle={settings.cardBackStyle}
         saveHistoryEnabled={settings.saveHistoryEnabled}
+        showScoreSummary={settings.showScoreSummary}
         profileName={profile.name}
         profileAvatarIndex={profile.avatarIndex}
         onExit={onExit}
@@ -108,6 +122,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       gameRules={settings.gameRules}
       cardBackStyle={settings.cardBackStyle}
       saveHistoryEnabled={settings.saveHistoryEnabled}
+      showScoreSummary={settings.showScoreSummary}
       profileName={profile.name}
       profileAvatarIndex={profile.avatarIndex}
       onExit={onExit}
@@ -128,13 +143,15 @@ function ResumePrompt({
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("game:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("game:resume.title")}</Text>
         <Text style={styles.toggleLabel}>{t("game:resume.body")}</Text>
         <View style={styles.choiceButtons}>
           <Button label={t("game:resume.resume")} onPress={onResume} />
           <Button label={t("game:resume.startNew")} onPress={onStartNew} variant="secondary" />
         </View>
-        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
     </SafeAreaView>
   );
@@ -145,6 +162,9 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("game:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("game:difficulty.label")}</Text>
         <View style={styles.choiceButtons}>
           <Button label={t("game:difficulty.easy")} onPress={() => onChoose("easy")} />
@@ -152,7 +172,6 @@ function DifficultyPicker({ onChoose, onExit }: { onChoose: (d: Difficulty) => v
           <Button label={t("game:difficulty.hard")} onPress={() => onChoose("hard")} />
           <Button label={t("game:difficulty.expert")} onPress={() => onChoose("expert")} />
         </View>
-        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </View>
     </SafeAreaView>
   );
@@ -171,12 +190,20 @@ function turnMessage(
   return "";
 }
 
+const ILLEGAL_PLAY_MESSAGE_KEY: Record<IllegalPlayReason, string> = {
+  "must-follow-suit": "game:illegalPlay.mustFollowSuit",
+  "must-beat": "game:illegalPlay.mustBeat",
+  "must-trump": "game:illegalPlay.mustTrump",
+  "hearts-locked": "game:illegalPlay.heartsLocked",
+};
+
 /** Constructs a fresh game store and renders it — the normal "pick a difficulty and deal" path. */
 function ActiveGame({
   difficulty,
   gameRules,
   cardBackStyle,
   saveHistoryEnabled,
+  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
@@ -185,6 +212,7 @@ function ActiveGame({
   gameRules: GameRules;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -194,7 +222,11 @@ function ActiveGame({
       ruleSet: gameRules,
       humanSeat: HUMAN_SEAT,
       difficulty,
-      firstDealer: 0,
+      // Randomized per new game (Francisco's request) — was hardcoded to seat 0 (always
+      // HUMAN_SEAT), so hand 1's dealer never varied. `rules-engine`'s `rotateLeftEachHand`
+      // already rotates correctly hand-to-hand off whatever this is; only the starting seat
+      // needed fixing.
+      firstDealer: ALL_SEATS[Math.floor(Math.random() * ALL_SEATS.length)],
       excludeAvatarIndex: profileAvatarIndex,
     }),
   );
@@ -203,6 +235,7 @@ function ActiveGame({
       store={store}
       cardBackStyle={cardBackStyle}
       saveHistoryEnabled={saveHistoryEnabled}
+      showScoreSummary={showScoreSummary}
       profileName={profileName}
       profileAvatarIndex={profileAvatarIndex}
       onExit={onExit}
@@ -216,6 +249,7 @@ function ResumedGame({
   session,
   cardBackStyle,
   saveHistoryEnabled,
+  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
@@ -223,6 +257,7 @@ function ResumedGame({
   session: SoloGameSession;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -233,6 +268,7 @@ function ResumedGame({
       store={store}
       cardBackStyle={cardBackStyle}
       saveHistoryEnabled={saveHistoryEnabled}
+      showScoreSummary={showScoreSummary}
       profileName={profileName}
       profileAvatarIndex={profileAvatarIndex}
       onExit={onExit}
@@ -247,6 +283,7 @@ function GameTable({
   store,
   cardBackStyle,
   saveHistoryEnabled,
+  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
@@ -254,6 +291,7 @@ function GameTable({
   store: GameStoreHook;
   cardBackStyle: CardBackStyle;
   saveHistoryEnabled: boolean;
+  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -279,6 +317,17 @@ function GameTable({
   // Full results-so-far table, on demand — without it, a player can only see the running score as
   // bare numbers in ScorePanel and has to wait for a hand to finish to see the hand-by-hand table.
   const [showScoreboard, setShowScoreboard] = useState(false);
+  // Expert difficulty only (see Hand's `explainIllegal`) — the message from the most recent
+  // illegal tap, auto-dismissed a few seconds later so it never lingers past the moment it's
+  // useful. `null` means nothing to show. The dismiss timer lives here (declared unconditionally,
+  // before this component's several early `return`s below) rather than next to where the message
+  // is set — React's rules of hooks don't allow a `useEffect` after a conditional return.
+  const [illegalMessage, setIllegalMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (illegalMessage === null) return;
+    const timer = setTimeout(() => setIllegalMessage(null), 3000);
+    return () => clearTimeout(timer);
+  }, [illegalMessage]);
 
   useEffect(() => {
     if (game.phase === "game-complete") {
@@ -335,6 +384,14 @@ function GameTable({
     (decision.kind === "trump" || decision.kind === "bid" || decision.kind === "dealer-decide") &&
     decision.player === HUMAN_SEAT;
   const legalCards = isHumanPlaying ? legalCardsFor(game, HUMAN_SEAT) : [];
+  // Expert difficulty stops graying out illegal cards and instead explains a mistaken tap (see
+  // Hand's `explainIllegal` doc comment) — "para que se sienta que el que juega es un jugador ya
+  // experimentado" (Francisco's request).
+  const explainIllegal = difficulty === "expert";
+  function handleIllegalTap(card: Card) {
+    const reason = illegalPlayReason(game, HUMAN_SEAT, card);
+    if (reason !== null) setIllegalMessage(t(ILLEGAL_PLAY_MESSAGE_KEY[reason]));
+  }
   const handSizes: Record<PlayerIndex, number> = {
     0: game.hands[0].length,
     1: game.hands[1].length,
@@ -360,12 +417,13 @@ function GameTable({
       >
         <View style={styles.header}>
           <View style={styles.headerLinks}>
-            <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" style={styles.headerLink} />
+            <BackButton onPress={onExit} label={t("game:backToMenu")} />
             <Button
               label={t("game:scoreboard.viewButton")}
               onPress={() => setShowScoreboard(true)}
               variant="ghost"
               style={styles.headerLink}
+              labelStyle={styles.headerLinkLabel}
             />
           </View>
           <View style={styles.difficultyBadge}>
@@ -381,6 +439,7 @@ function GameTable({
           handNumber={game.handIndex + 1}
           scores={game.cumulativeScores}
           seatLabels={seatLabels}
+          showProgress={showScoreSummary}
         />
         <View style={styles.tableStage}>
           <Table
@@ -423,8 +482,16 @@ function GameTable({
             <Button label={t("game:redeal.button")} onPress={requestRedeal} variant="secondary" style={styles.inlineButton} />
           </Panel>
         )}
+        {illegalMessage !== null && <Toast message={illegalMessage} />}
         <Text style={styles.turnIndicator}>{turnMessage(decision, isHumanPlaying, seatLabels, t)}</Text>
-        <Hand cards={game.hands[HUMAN_SEAT]} legalCards={legalCards} onPlay={playCard} interactive={isHumanPlaying} />
+        <Hand
+          cards={game.hands[HUMAN_SEAT]}
+          legalCards={legalCards}
+          onPlay={playCard}
+          interactive={isHumanPlaying}
+          explainIllegal={explainIllegal}
+          onIllegalTap={handleIllegalTap}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -599,10 +666,12 @@ function HandCompleteView({
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("game:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("game:handComplete.title", { number: game.handIndex + 1 })}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Button label={t("game:handComplete.continue")} onPress={onContinue} />
-        <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
       </ScrollView>
     </SafeAreaView>
   );
@@ -654,10 +723,12 @@ function GameOverView({
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}
       >
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("game:backToMenu")} />
+        </View>
         <Text style={styles.title}>{t("game:gameOver")}</Text>
         <Text style={styles.winnerText}>{winnerLine}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
-        <Button label={t("game:backToMenu")} onPress={onExit} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -700,7 +771,7 @@ const styles = StyleSheet.create({
   },
   header: {
     width: "100%",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -708,7 +779,16 @@ const styles = StyleSheet.create({
   headerLink: {
     minWidth: 0,
     paddingHorizontal: 0,
+    // Trimmed vertical padding and font size — this now sits stacked directly below the back
+    // button (per Francisco's request to un-crowd them from a single row), so its own footprint
+    // matters more than it used to now that it adds a full extra line to the header instead of
+    // sharing one.
+    paddingVertical: 1,
     alignSelf: "flex-start",
+  },
+  headerLinkLabel: {
+    fontSize: 12,
+    lineHeight: 14,
   },
   lastTrickToggle: {
     flexDirection: "row",
@@ -717,6 +797,7 @@ const styles = StyleSheet.create({
   },
   headerLinks: {
     alignItems: "flex-start",
+    gap: 2,
   },
   // Which AI difficulty this Solo game is running at — always visible during play, not just at
   // the picker, per Francisco's request. Online has no such concept, so this lives here (a
@@ -870,6 +951,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemi,
     fontSize: 13,
     minHeight: 18,
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
   },
 });

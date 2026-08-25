@@ -53,6 +53,21 @@ const CARD_EXIT_MS = 150;
 // Francisco's explicit "esa no tiene que ser tan grande" request.
 const LAST_TRICK_CARD_SCALE = 0.72;
 
+// The center cluster reserves a full non-overlapping cross of 4 slots (top/left/right/bottom, see
+// the Table doc comment) whether or not a card is actually down in each one — at full table-face
+// size that's 3 stacked card-heights (top slot + middle row + bottom slot), by far the tallest
+// single element on the whole screen and, empirically, the biggest lever for fitting the table on
+// a real (short) phone viewport without scrolling. Same `scale` mechanism CardBack (0.82) and the
+// last-trick corner (0.72, above) already use — this is a live trick card, so it stays closer to
+// full size than either of those, but still meaningfully smaller than the player's own hand.
+// Bigger than a card actually in a player's own hand, and deliberately overlapping (see
+// `clusterMiddleRow`/`bottomSlotWrap`'s negative margins below) rather than the old fully
+// non-overlapping cross — per Francisco's request: these are about to matter more once real
+// per-suit card-face art lands (figures/pips need to actually read at a glance), and overlap is
+// what keeps 4 now-much-bigger cards from ballooning the table's total footprint the way 4
+// non-overlapping ones would.
+const TRICK_CARD_SCALE = 1.1;
+
 /**
  * A fixed, small tilt + nudge per compass position — cards thrown down "casually," like a real
  * hand of cards landing slightly askew, rather than perfectly grid-aligned. Deliberately subtle (a
@@ -131,7 +146,7 @@ function TrickSlot({ card, position }: { card: Card | null; position: SeatPositi
             transform: [{ scale }, { rotate: tilt.rotate }, { translateX: tilt.translateX }, { translateY: tilt.translateY }],
           }}
         >
-          <PlayingCard card={displayCard} />
+          <PlayingCard card={displayCard} scale={TRICK_CARD_SCALE} />
         </Animated.View>
       )}
     </View>
@@ -199,7 +214,7 @@ export function Table({
             </View>
             {renderTrickCard("right")}
           </View>
-          {renderTrickCard("bottom")}
+          <View style={styles.bottomSlotWrap}>{renderTrickCard("bottom")}</View>
         </View>
         {renderOpponent("right")}
       </View>
@@ -210,7 +225,10 @@ export function Table({
           isActive={currentTurn === humanSeat}
           isDealer={dealer === humanSeat}
           size="sm"
-          showName={false}
+          // The human's own name now shows next to their avatar too — the same "name visible
+          // beside the portrait" treatment OpponentSeat's own name text gives every opponent, per
+          // Francisco's explicit request.
+          showName
         />
         <TrickPile count={tricksWon[humanSeat]} />
       </View>
@@ -241,7 +259,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.goldMuted,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
     paddingHorizontal: spacing.xs,
   },
   topRow: {
@@ -260,11 +278,18 @@ const styles = StyleSheet.create({
   clusterMiddleRow: {
     flexDirection: "row",
     alignItems: "center",
+    // Pulls the left/right cards up under the top card's bottom edge — a real overlap, not the
+    // old fully non-overlapping cross — per Francisco's explicit "se pueden traslapar" request.
+    marginTop: -CARD_HEIGHT * TRICK_CARD_SCALE * 0.42,
   },
   clusterGap: {
-    width: 32,
+    width: 4,
     alignItems: "center",
     justifyContent: "center",
+  },
+  bottomSlotWrap: {
+    // Same overlap, one more level: pulls the "own play" slot up under the left/right row.
+    marginTop: -CARD_HEIGHT * TRICK_CARD_SCALE * 0.42,
   },
   feltWell: {
     width: 24,
@@ -275,8 +300,8 @@ const styles = StyleSheet.create({
     borderColor: colors.goldMuted,
   },
   trickSlot: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    width: CARD_WIDTH * TRICK_CARD_SCALE,
+    height: CARD_HEIGHT * TRICK_CARD_SCALE,
   },
   humanPile: {
     flexDirection: "row",

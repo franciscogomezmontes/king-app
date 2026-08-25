@@ -7,10 +7,12 @@ export type AvatarSize = "xs" | "sm" | "md" | "lg";
 
 // "sm" is the table-context size — each opponent's corner badge and the human's own seat marker
 // (Table.tsx) — sized as large as the corner-badge layout can hold without overwhelming the
-// card-back it sits on; bumped twice now (32 -> 40 -> 52) chasing "still too small" feedback, each
-// time re-verified against the card-back proportions in OpponentSeat.tsx before landing. "xs" is
+// card-back it sits on; bumped three times now (32 -> 40 -> 52 -> 62) chasing "still too small"
+// feedback, each time re-verified against the card-back proportions in OpponentSeat.tsx before
+// landing — this bump paired with OpponentSeat's own CARD_BACK_SCALE increase (0.82 -> 0.95), once
+// Phase 6's trick-cluster shrink freed enough vertical room to spend some of it back here. "xs" is
 // kept as a smaller option for a future denser context, not used anywhere today.
-const DIAMETER: Record<AvatarSize, number> = { xs: 32, sm: 52, md: 56, lg: 72 };
+const DIAMETER: Record<AvatarSize, number> = { xs: 32, sm: 62, md: 64, lg: 72 };
 const RING_PADDING = 3;
 // Scaling the name label down with the avatar keeps a 3-opponent row from looking top-heavy —
 // "xs"'s tighter marginTop specifically is what claws back the height OpponentSeat needed most.

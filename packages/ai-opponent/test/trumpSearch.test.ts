@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Card, DEFAULT_GAME_RULES, deal, createDeck, shuffle } from "rules-engine";
-import { bestTrumpCandidate, decideBid, EvaluatedTrumpCandidate } from "../src/trumpSearch";
+import { bestTrumpCandidate, decideBid, decideOpenAuction, EvaluatedTrumpCandidate } from "../src/trumpSearch";
 
 function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
@@ -83,6 +83,82 @@ describe("bestTrumpCandidate — picks the genuinely stronger trump", () => {
 
     const best = bestTrumpCandidate(hand, 0, 0, DEFAULT_GAME_RULES, TEST_BUDGET_MS, mulberry32(6));
     expect(best.trump).toBe("H");
+  });
+});
+
+// `bestTrumpCandidate` simulates the rest of the hand being played out (see `simulateOnce`), so
+// unlike `trump.test.ts`'s/`auction.test.ts`'s formula-based fixtures, these need a real, full
+// 13-card hand — a short fixture leaves this seat with no cards left partway through the
+// simulated play while the other seats still have theirs. Spread evenly across all 4 suits
+// (rather than padding with whatever's left in raw deck order, which tends to dump a long,
+// single-suit run into one suit — exactly the kind of length that this session's own
+// "prefers a suit that's both longer and stronger" test above documents as a real, easily
+// underestimated source of trick-taking power on its own, and would make a "weak hand" fixture
+// accidentally strong).
+const WEAK_SPREAD_HAND: Card[] = [
+  card("S", 2),
+  card("S", 4),
+  card("S", 6),
+  card("H", 3),
+  card("H", 5),
+  card("H", 7),
+  card("D", 2),
+  card("D", 4),
+  card("D", 6),
+  card("C", 3),
+  card("C", 5),
+  card("C", 7),
+  card("C", 9),
+];
+
+describe("decideOpenAuction — opening is a free option when auctionMustSell is off", () => {
+  it("opens with a mediocre hand when not forced to sell", () => {
+    const best = bestTrumpCandidate(WEAK_SPREAD_HAND, 0, 0, DEFAULT_GAME_RULES, TEST_BUDGET_MS, mulberry32(1));
+    expect(decideOpenAuction(best, false)).toBe(true);
+  });
+
+  it("still declares directly with a genuinely exceptional hand, even when not forced to sell", () => {
+    const exceptional: Card[] = [
+      card("H", 14),
+      card("H", 13),
+      card("H", 12),
+      card("H", 11),
+      card("H", 10),
+      card("H", 9),
+      card("H", 8),
+      card("C", 2),
+      card("C", 3),
+      card("C", 4),
+      card("S", 5),
+      card("S", 6),
+      card("S", 7),
+    ]; // same fixture as "prefers a suit that's both longer and stronger" above
+    const best = bestTrumpCandidate(exceptional, 0, 0, DEFAULT_GAME_RULES, TEST_BUDGET_MS, mulberry32(5));
+    expect(decideOpenAuction(best, false)).toBe(false);
+  });
+
+  it("stays cautious about opening a merely mediocre hand when auctionMustSell is on", () => {
+    // One guaranteed 2-trick holding (A-K of spades) plus otherwise-weak, spread-out length —
+    // enough to clear the cautious forced-sell threshold (3) without being the kind of
+    // exceptional hand the test above uses.
+    const mediocre: Card[] = [
+      card("S", 14),
+      card("S", 13),
+      card("S", 3),
+      card("S", 5),
+      card("S", 7),
+      card("H", 2),
+      card("H", 4),
+      card("H", 6),
+      card("D", 2),
+      card("D", 4),
+      card("D", 6),
+      card("C", 2),
+      card("C", 4),
+    ];
+    const ruleSet = { ...DEFAULT_GAME_RULES, auctionMustSell: true };
+    const best = bestTrumpCandidate(mediocre, 0, 0, ruleSet, TEST_BUDGET_MS, mulberry32(2));
+    expect(decideOpenAuction(best, true)).toBe(false);
   });
 });
 

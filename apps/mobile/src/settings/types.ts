@@ -17,6 +17,11 @@ export interface Settings {
    * default — this only controls future saves, never retroactively deletes anything already
    * saved (that's the History screen's own per-game/clear-all delete instead). */
   saveHistoryEnabled: boolean;
+  /** Whether the live table shows the running-score progress bars (ScorePanel's ScoreProgress)
+   * above the felt. Off by default (per Francisco's request) — most players don't need it visible
+   * every hand, and hiding it by default reclaims real vertical space on a phone screen; a player
+   * who wants it can turn it back on here. */
+  showScoreSummary: boolean;
 }
 
 export const SETTINGS_VERSION = 1 as const;
@@ -31,4 +36,5 @@ export const DEFAULT_SETTINGS: Settings = {
   cardBackStyle: "laurel",
   gameRules: DEFAULT_GAME_RULES,
   saveHistoryEnabled: true,
+  showScoreSummary: false,
 };

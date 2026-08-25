@@ -5,6 +5,7 @@ import type { GameRules, GameState, PlayerIndex } from "rules-engine";
 import { canRequestRedeal, highestBid, legalCardsFor, SUITS } from "rules-engine";
 import {
   AuctionSummary,
+  BackButton,
   Button,
   GAME_RULE_TOGGLE_KEYS,
   Hand,
@@ -58,7 +59,14 @@ export function OnlineScreen({ onExit }: OnlineScreenProps) {
     if (envelope.game.phase === "awaiting-deal") {
       return <WaitingRoom store={store} envelope={envelope} onExit={onExit} />;
     }
-    return <ActiveOnlineGame store={store} saveHistoryEnabled={settings.saveHistoryEnabled} onExit={onExit} />;
+    return (
+      <ActiveOnlineGame
+        store={store}
+        saveHistoryEnabled={settings.saveHistoryEnabled}
+        showScoreSummary={settings.showScoreSummary}
+        onExit={onExit}
+      />
+    );
   }
 
   return <Lobby store={store} defaultGameRules={settings.gameRules} onExit={onExit} />;
@@ -114,18 +122,21 @@ function Lobby({
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton
+            onPress={step === "choice" ? onExit : () => setStep("choice")}
+            label={step === "choice" ? t("game:backToMenu") : t("online:title")}
+          />
+        </View>
         <Text style={styles.title}>{t("online:title")}</Text>
 
         {lastError !== null && <Text style={styles.errorText}>{lastError}</Text>}
 
         {step === "choice" && (
-          <>
-            <View style={styles.choiceButtons}>
-              <Button label={t("online:modeChoice.host")} onPress={() => setStep("create")} />
-              <Button label={t("online:modeChoice.join")} onPress={() => setStep("join")} />
-            </View>
-            <Button label={t("game:backToMenu")} onPress={onExit} variant="ghost" />
-          </>
+          <View style={styles.choiceButtons}>
+            <Button label={t("online:modeChoice.host")} onPress={() => setStep("create")} />
+            <Button label={t("online:modeChoice.join")} onPress={() => setStep("join")} />
+          </View>
         )}
 
         {step === "create" && (
@@ -149,7 +160,6 @@ function Lobby({
               ))}
             </View>
             <Button label={t("online:create.button")} onPress={submitHost} disabled={!displayName.trim() || !address.trim()} />
-            <Button label={t("game:backToMenu")} onPress={() => setStep("choice")} variant="ghost" />
           </>
         )}
 
@@ -177,7 +187,6 @@ function Lobby({
               onPress={submitJoin}
               disabled={!displayName.trim() || !address.trim() || !roomCode.trim()}
             />
-            <Button label={t("game:backToMenu")} onPress={() => setStep("choice")} variant="ghost" />
           </>
         )}
       </ScrollView>
@@ -241,6 +250,15 @@ function WaitingRoom({
   return (
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton
+            onPress={() => {
+              leaveGame();
+              onExit();
+            }}
+            label={t("online:leaveRoom")}
+          />
+        </View>
         <Text style={styles.title}>{t("online:waiting.title")}</Text>
         <Text style={styles.roomCode}>{envelope.roomCode}</Text>
         <Text style={styles.fieldHint}>{t("online:waiting.shareHint")}</Text>
@@ -257,15 +275,6 @@ function WaitingRoom({
             </Surface>
           ))}
         </View>
-
-        <Button
-          label={t("online:leaveRoom")}
-          onPress={() => {
-            leaveGame();
-            onExit();
-          }}
-          variant="ghost"
-        />
       </View>
     </SafeAreaView>
   );
@@ -288,10 +297,12 @@ function turnMessage(
 function ActiveOnlineGame({
   store,
   saveHistoryEnabled,
+  showScoreSummary,
   onExit,
 }: {
   store: OnlineGameStoreHook;
   saveHistoryEnabled: boolean;
+  showScoreSummary: boolean;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -341,7 +352,7 @@ function ActiveOnlineGame({
     <SafeAreaView style={styles.container}>
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
-          <Button label={t("online:leaveRoom")} onPress={exit} variant="ghost" style={styles.headerLink} />
+          <BackButton onPress={exit} label={t("online:leaveRoom")} />
           <View style={styles.lastTrickToggle}>
             <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
             <Switch
@@ -357,7 +368,13 @@ function ActiveOnlineGame({
           </Text>
         )}
 
-        <ScorePanel handType={game.handType} handNumber={game.handIndex + 1} scores={game.cumulativeScores} seatLabels={seatLabels} />
+        <ScorePanel
+          handType={game.handType}
+          handNumber={game.handIndex + 1}
+          scores={game.cumulativeScores}
+          seatLabels={seatLabels}
+          showProgress={showScoreSummary}
+        />
         <Table
           humanSeat={mySeat}
           dealer={game.dealer}
@@ -525,10 +542,12 @@ function HandCompleteView({
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("online:leaveRoom")} />
+        </View>
         <Text style={styles.title}>{t("game:handComplete.title", { number: game.handIndex + 1 })}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
         <Button label={t("game:handComplete.continue")} onPress={onContinue} />
-        <Button label={t("online:leaveRoom")} onPress={onExit} variant="ghost" />
       </ScrollView>
     </SafeAreaView>
   );
@@ -578,10 +597,12 @@ function GameOverView({
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollContainer} contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}>
+        <View style={styles.header}>
+          <BackButton onPress={onExit} label={t("online:leaveRoom")} />
+        </View>
         <Text style={styles.title}>{t("game:gameOver")}</Text>
         <Text style={styles.winnerText}>{winnerLine}</Text>
         <Scoreboard handHistory={game.handHistory} seatLabels={seatLabels} />
-        <Button label={t("online:leaveRoom")} onPress={onExit} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -609,11 +630,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-  },
-  headerLink: {
-    minWidth: 0,
-    paddingHorizontal: 0,
-    alignSelf: "flex-start",
   },
   lastTrickToggle: {
     flexDirection: "row",

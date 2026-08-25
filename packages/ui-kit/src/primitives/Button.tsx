@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { colors, fonts, radii, spacing } from "../theme";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost";
@@ -9,20 +9,23 @@ export interface ButtonProps {
   variant?: ButtonVariant;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** Extra style for the label `Text` itself (e.g. a smaller font for a ghost link squeezed into
+   * a tight spot) — `style` above only reaches the outer `Pressable`. */
+  labelStyle?: StyleProp<TextStyle>;
 }
 
 /**
  * Shared pressable used by home, GameScreen, and Scorekeeper so those screens stop
  * duplicating the same cream-on-forest button styles.
  */
-export function Button({ label, onPress, variant = "primary", disabled = false, style }: ButtonProps) {
+export function Button({ label, onPress, variant = "primary", disabled = false, style, labelStyle }: ButtonProps) {
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled}
       style={[styles.base, variantStyles[variant], disabled && styles.disabled, style]}
     >
-      <Text style={[styles.label, labelStyles[variant]]}>{label}</Text>
+      <Text style={[styles.label, labelStyles[variant], labelStyle]}>{label}</Text>
     </Pressable>
   );
 }

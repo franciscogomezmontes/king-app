@@ -1,11 +1,20 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 import type { Card, Rank } from "rules-engine";
+import { useTranslation } from "../i18n";
 import { colors, fonts, radii } from "../theme";
 
 export const SUIT_SYMBOLS: Record<Card["suit"], string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
 const RED_SUITS = new Set<Card["suit"]>(["H", "D"]);
-const RANK_LABELS: Partial<Record<Rank, string>> = { 11: "J", 12: "Q", 13: "K", 14: "A" };
+// Which "rules:rankLabels" key each court rank maps to — the actual letter is locale-dependent
+// (see rulesResources.ts's own doc comment: French/German use their real-table abbreviations,
+// not the English letters transliterated), so this only maps rank -> key, never rank -> letter.
+const RANK_LABEL_KEY: Partial<Record<Rank, "jack" | "queen" | "king" | "ace">> = {
+  11: "jack",
+  12: "queen",
+  13: "king",
+  14: "ace",
+};
 const COURT_RANKS = new Set<Rank>([11, 12, 13]);
 
 export type CardFace = "fan" | "table";
@@ -22,8 +31,9 @@ export const CARD_HEIGHT = DIM.table.height;
 export const FAN_CARD_WIDTH = DIM.fan.width;
 export const FAN_CARD_HEIGHT = DIM.fan.height;
 
-function rankLabel(rank: Rank): string {
-  return RANK_LABELS[rank] ?? String(rank);
+function rankLabel(rank: Rank, t: (key: string) => string): string {
+  const key = RANK_LABEL_KEY[rank];
+  return key !== undefined ? t(`rules:rankLabels.${key}`) : String(rank);
 }
 
 function suitColor(suit: Card["suit"]): string {
@@ -75,11 +85,13 @@ export function PlayingCard({
   style,
   scale = 1,
 }: PlayingCardProps) {
+  const { t } = useTranslation();
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
   const isAceHearts = card.rank === 14 && card.suit === "H";
   const isKingHearts = card.rank === 13 && card.suit === "H";
   const dim = DIM[face];
+  const label = rankLabel(card.rank, t);
 
   const card_ = (
     <View style={[styles.shadowWrap, { width: dim.width, height: dim.height }, style]}>
@@ -93,12 +105,12 @@ export function PlayingCard({
           isKingHearts && face === "table" && styles.cardKingHearts,
         ]}
       >
-        <CornerIndex rank={card.rank} suit={card.suit} color={color} large={face === "fan"} />
+        <CornerIndex label={label} suit={card.suit} color={color} large={face === "fan"} />
         {face === "table" && (
           <>
-            <CornerIndex rank={card.rank} suit={card.suit} color={color} inverted />
+            <CornerIndex label={label} suit={card.suit} color={color} inverted />
             {COURT_RANKS.has(card.rank) ? (
-              <CourtFace rank={card.rank} suit={card.suit} color={color} special={isKingHearts} />
+              <CourtFace label={label} suit={card.suit} color={color} special={isKingHearts} />
             ) : card.rank === 14 ? (
               <AcePip suit={card.suit} color={color} special={isAceHearts} />
             ) : (
@@ -131,24 +143,24 @@ export function PlayingCard({
 }
 
 function CornerIndex({
-  rank,
+  label,
   suit,
   color,
   inverted = false,
   large = false,
 }: {
-  rank: Rank;
+  label: string;
   suit: Card["suit"];
   color: string;
   inverted?: boolean;
   large?: boolean;
 }) {
-  const ten = rank === 10;
+  // A 2-character label ("10", today's only case) needs the narrower style regardless of which
+  // locale/rank produced it — locale-proof, unlike checking `rank === 10` directly.
+  const wide = label.length > 1;
   return (
     <View style={[styles.corner, inverted ? styles.cornerInverted : styles.cornerTop, large && styles.cornerLarge]}>
-      <Text style={[large ? styles.rankFan : styles.rank, ten && !large && styles.rankTen, { color }]}>
-        {rankLabel(rank)}
-      </Text>
+      <Text style={[large ? styles.rankFan : styles.rank, wide && !large && styles.rankTen, { color }]}>{label}</Text>
       <Text style={[large ? styles.suitFan : styles.suit, { color }]}>{SUIT_SYMBOLS[suit]}</Text>
     </View>
   );
@@ -213,19 +225,19 @@ function AcePip({ suit, color, special }: { suit: Card["suit"]; color: string; s
 }
 
 function CourtFace({
-  rank,
+  label,
   suit,
   color,
   special,
 }: {
-  rank: Rank;
+  label: string;
   suit: Card["suit"];
   color: string;
   special: boolean;
 }) {
   return (
     <View style={styles.courtWell} pointerEvents="none">
-      <Text style={[styles.courtRank, { color: special ? colors.gold : color }]}>{rankLabel(rank)}</Text>
+      <Text style={[styles.courtRank, { color: special ? colors.gold : color }]}>{label}</Text>
       <Text style={[styles.courtSuit, { color }]}>{SUIT_SYMBOLS[suit]}</Text>
     </View>
   );
