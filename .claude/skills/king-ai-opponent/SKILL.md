@@ -95,7 +95,33 @@ searched; every deeper node in the tree, and every rollout decision via `chooseC
 unaffected). See `chooseCard.test.ts`'s regression test, which checks both tiers against the same
 scenario.
 
-Regression-test cadence for all four fixes above: `hardVsNormal.test.ts` and
+**ISMCTS's root-candidate restriction covered negative-hand *leads* only — extended to negative-hand
+mid-trick discards and to positive-hand trump leads (`heuristic.ts`'s `safeNegativeDiscard`/
+`safePositiveLeads`, wired into `ismcts.ts`'s `rootCandidates`).** Reported live: a bot in No King
+of Hearts, already void in two suits with free, safe chances to discard the King of Hearts, held it
+for several more tricks before finally shedding it — unlike a real player, who dumps a penalty card
+the instant it's safe. Separately: bots at Difícil/Experto sometimes led a trump "just to lead it,"
+with no proven master and nowhere near `TRUMP_LEAD_CONTROL_LENGTH`. Both trace to the same root
+cause: `nonDominatedLeads`/`safeNegativeLeads` (above) only ever restricted `rootCandidates` for a
+negative-hand *lead* (`state.currentTrick.length === 0`); every other root decision — a negative
+hand's mid-trick discard, and *any* positive-hand decision at all — used unrestricted
+`legalCardsFor`, so Tier 1's already-correct, already-tested domain heuristics (`mostDangerous`,
+`choosePositiveLead`'s trump-control gating) had zero structural influence on what Hard/Expert
+actually plays at the root; they only shaped rollouts several plies too late. Fixed the same way as
+`nonDominatedLeads`, not by inventing a new pattern: `safeNegativeDiscard(state, player, legal,
+ruleSet)` mirrors `chooseCardHeuristic`'s own mid-trick branch — when a genuinely safe nonWinner
+exists, narrows straight to the single most-dangerous one (this decision is unconditionally
+correct, per that branch's own reasoning, so there's no reason to spend search budget on it at
+all — a rare case where the restriction *is* the answer, not just a filter). `safePositiveLeads`
+excludes trump only when it's neither a master nor genuine control length, leaving every other
+candidate (including a *justified* trump lead) for the search to actually weigh — narrowing the
+field, not answering the question, since which non-trump suit to lead is genuinely open. See
+`chooseCard.test.ts`'s new regression tests (King-of-Hearts-held-too-long at Difícil/Experto
+budgets; merely-decent-trump-not-led at Difícil/Experto budgets, requiring a full self-consistent
+13/13/13/13 deal since excluding trump still leaves several real candidates, unlike the negative-
+discard case's single-candidate collapse).
+
+Regression-test cadence for all six fixes above: `hardVsNormal.test.ts` and
 `difficultyComparison.test.ts` re-verify the "better tier wins" invariant after each one — the
 specific margins shift as the heuristic/search get stronger, but the direction (Normal beats the
 old pre-tracking heuristic; Hard beats Normal) must keep holding. Re-run both after touching any of

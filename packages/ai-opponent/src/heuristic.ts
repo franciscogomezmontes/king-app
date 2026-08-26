@@ -17,7 +17,7 @@ import { CardTracker, isMasterCard, nonDominatedLeads, opponentVoidCount, trackC
 /** Would playing `card` right now win the trick? Exact when `player` is last to act; a sound
  * heuristic signal otherwise. Reuses `resolveTrick` itself rather than reimplementing rank/trump
  * comparisons — the bot must never hand-roll legality or trick resolution. */
-function wouldCurrentlyWin(
+export function wouldCurrentlyWin(
   state: GameState,
   player: PlayerIndex,
   card: Card,
@@ -152,6 +152,64 @@ export function safeNegativeLeads(
   handType: NegativeHandType,
 ): Card[] {
   return excludeDangerousLeads(nonDominatedLeads(legal, hand, tracker), handType);
+}
+
+/**
+ * Root-candidate restriction for a negative-hand *mid-trick* decision (leading has its own
+ * `safeNegativeLeads`, above) — mirrors `chooseCardHeuristic`'s own mid-trick branch exactly:
+ * forced to win (every legal card would currently win the trick)? No restriction; every option is
+ * a genuine, live choice worth letting the search weigh. Otherwise a nonWinner is a permanently
+ * safe fact this trick — already beaten, which can't be undone by anything played later — and per
+ * that branch's own reasoning the single most dangerous nonWinner is unconditionally the right one
+ * to shed, not just a reasonable candidate among others. Narrows straight to that one card instead
+ * of leaving a modest, time-boxed search budget to (noisily) rediscover it — a real bot observed
+ * holding the King of Hearts long after it first had a free, safe chance to discard it (already
+ * void in the led suit) is exactly the failure mode this closes: rollouts already shed it
+ * eventually via Tier 1, so "discard it now" vs. "keep it, discard something else" can score
+ * deceptively similar in backpropagated average reward with only a few samples per branch. See
+ * .claude/skills/king-ai-opponent and `ismcts.ts`'s own doc comments.
+ */
+export function safeNegativeDiscard(
+  state: GameState,
+  player: PlayerIndex,
+  legal: Card[],
+  ruleSet: RuleSet,
+): Card[] {
+  // Negative hands never have trump (CLAUDE.md: "no trumps in negative hands") — this function is
+  // only ever called in that context, so there's nothing for `wouldCurrentlyWin` to weigh beyond
+  // the led suit's own rank order.
+  const winners = legal.filter((card) => wouldCurrentlyWin(state, player, card, null, ruleSet));
+  const nonWinners = legal.filter((card) => !winners.includes(card));
+  if (nonWinners.length === 0) return legal;
+  return [mostDangerous(nonWinners, state.handType as NegativeHandType, ruleSet.backwards)];
+}
+
+/**
+ * Root-candidate restriction for a positive-hand *lead* — excludes trump from consideration unless
+ * it's actually justified (a master trump, or genuine control length — see `choosePositiveLead`'s
+ * own `TRUMP_LEAD_CONTROL_LENGTH`), the same domain fact Tier 1 already applies deterministically.
+ * Without this, the search has to rediscover on every single hand, under a modest time budget,
+ * that leading a bare/thin trump holding just to lead it has no real tactical payoff — reported
+ * from live play as trumps getting "played just to play them." Deliberately does *not* collapse to
+ * Tier 1's own single pick the way `safeNegativeDiscard` does above: which non-trump suit to lead
+ * (or whether a *justified* trump lead beats one of them) is a genuinely open, search-worthy
+ * question this only narrows the field for, not one it answers outright.
+ */
+export function safePositiveLeads(
+  legal: Card[],
+  hand: Card[],
+  tracker: CardTracker,
+  ruleSet: RuleSet,
+  trumpSuit: TrumpSuit,
+): Card[] {
+  if (trumpSuit === null) return legal;
+  const legalTrump = legal.filter((c) => c.suit === trumpSuit);
+  if (legalTrump.length === 0) return legal;
+  const hasMasterTrump = bestMaster(legalTrump, hand, tracker, ruleSet) !== null;
+  const hasControlLength = suitLength(hand, trumpSuit) >= TRUMP_LEAD_CONTROL_LENGTH;
+  if (hasMasterTrump || hasControlLength) return legal;
+  const nonTrump = legal.filter((c) => c.suit !== trumpSuit);
+  return nonTrump.length > 0 ? nonTrump : legal;
 }
 
 /**

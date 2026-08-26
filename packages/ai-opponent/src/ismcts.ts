@@ -2,6 +2,8 @@ import {
   applyAction,
   Card,
   createDeck,
+  currentRuleSet,
+  currentTrumpSuit,
   GameState,
   legalCardsFor,
   NegativeHandType,
@@ -11,7 +13,7 @@ import {
   Suit,
 } from "rules-engine";
 import { CardTracker, trackCards } from "./cardTracker";
-import { chooseCardHeuristic, safeNegativeLeads } from "./heuristic";
+import { chooseCardHeuristic, safeNegativeDiscard, safeNegativeLeads, safePositiveLeads } from "./heuristic";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 
@@ -146,13 +148,10 @@ interface RewardRange {
  * `rootCandidates`, when non-null, restricts which actions are ever considered at the tree's
  * root node specifically (`node === root`, i.e. depth 0 of this iteration — the real decision
  * being searched, before any determinization-specific divergence) — see `ismctsChooseCard`'s own
- * doc comment for why: excluding negative-hand leads that are either self-evidently dominated (a
- * proven master, guaranteed to win with no trump to ever beat it) or in this hand type's own
- * danger category (e.g. a Jack or King in noGentlemen) before the search spends any of its modest
- * budget on them, rather than trusting the budget to statistically discover what's already known
- * domain facts. Every deeper node (any other decision point reached later in a rollout/traversal,
- * including this same player leading again in a later trick) is unaffected — full `legalCardsFor`
- * as always. */
+ * doc comment for the full breakdown of which decisions get pre-filtered by which known domain
+ * fact, and why, before the search spends any of its modest budget on them. Every deeper node (any
+ * other decision point reached later in a rollout/traversal, including this same player leading or
+ * discarding again in a later trick) is unaffected — full `legalCardsFor` as always. */
 function runIteration(
   root: TreeNode,
   state: GameState,
@@ -231,16 +230,20 @@ export const EXPERT_BUDGET_MS = 900;
  * `budgetMs` is a parameter (not hardcoded to `HARD_BUDGET_MS`/`EXPERT_BUDGET_MS`) specifically so
  * tests can drive this with tiny/zero budgets without waiting on production-length searches.
  *
- * For a negative-hand lead specifically, the root's candidate set excludes self-evidently
- * dominated moves (`safeNegativeLeads` — a proven master card, guaranteed to win its own trick
- * with no trump in a negative hand to ever beat it, or a card in this hand type's own danger
- * category, e.g. a Jack or King in noGentlemen) before the search even starts, rather than relying
- * on a modest time budget spread across a wide branching factor — worst-case exactly at trick 1,
- * with the least tracking information and the most legal options — to statistically discover what
- * a domain expert already knows outright: leading your own penalty card with zero information is
- * a needless risk with no offsetting upside this bot's evaluation models. See
- * .claude/skills/king-ai-opponent and `runIteration`'s own doc comment for exactly where this
- * applies (root only, not every node in the tree).
+ * The root's candidate set is pre-filtered by the same domain facts Tier 1 already applies
+ * deterministically, rather than relying on a modest time budget spread across a wide branching
+ * factor to statistically rediscover them — see .claude/skills/king-ai-opponent and `runIteration`'s
+ * own doc comment for exactly where this applies (root only, not every node in the tree):
+ * - Negative-hand lead: excludes self-evidently dominated moves (`safeNegativeLeads` — a proven
+ *   master, or a card in this hand type's own danger category, e.g. a Jack or King in noGentlemen).
+ * - Negative-hand mid-trick (following/discarding): when a safe, non-winning play exists, narrows
+ *   straight to the single most dangerous one (`safeNegativeDiscard`) — a permanently safe, zero-
+ *   cost moment to shed a danger card is not a close call worth spending search budget on.
+ * - Positive-hand lead: excludes an unjustified trump lead (`safePositiveLeads` — no master, and
+ *   not genuine control length) so the search can't "discover" that leading a bare trump just to
+ *   lead it occasionally looks fine in a handful of noisy rollouts.
+ * - Positive-hand mid-trick: unrestricted — Tier 1's own "win cheaply, else duck cheaply" logic
+ *   here has no equivalent structural gap to close (see the heuristic's own mid-trick branch).
  */
 export function ismctsChooseCard(
   state: GameState,
@@ -251,10 +254,15 @@ export function ismctsChooseCard(
   const rootLegal = legalCardsFor(state, player);
   if (rootLegal.length <= 1) return rootLegal[0];
 
-  const rootCandidates: Card[] | null =
-    state.handType !== "positive" && state.currentTrick.length === 0
-      ? safeNegativeLeads(rootLegal, state.hands[player], trackCards(state), state.handType as NegativeHandType)
-      : null;
+  const isPositive = state.handType === "positive";
+  const leading = state.currentTrick.length === 0;
+  const rootCandidates: Card[] | null = leading
+    ? isPositive
+      ? safePositiveLeads(rootLegal, state.hands[player], trackCards(state), currentRuleSet(state), currentTrumpSuit(state))
+      : safeNegativeLeads(rootLegal, state.hands[player], trackCards(state), state.handType as NegativeHandType)
+    : isPositive
+      ? null
+      : safeNegativeDiscard(state, player, rootLegal, currentRuleSet(state));
   if (rootCandidates !== null && rootCandidates.length === 1) return rootCandidates[0];
 
   const root = newNode();

@@ -307,6 +307,28 @@ describe("chooseCard — negative hands, void discards", () => {
   }
 });
 
+describe("chooseCard — ISMCTS mid-trick discard of a danger card (Difícil/Experto)", () => {
+  // Francisco's exact bug report: in "No K de Corazones," a bot already void in two suits held the
+  // King of Hearts long past its first free, safe chance to discard it, only shedding it much
+  // later once the hand was well underway — unlike a real player, who'd dump it the instant it's
+  // safe. Tier 1 ("normal") already gets this right (see the "void discards" block above); this
+  // covers the same scenario at ISMCTS's own root-candidate level (`safeNegativeDiscard`).
+  it("discards the King of Hearts the first time it's a free, safe void discard, not later", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noKingOfHearts",
+      hands: { 0: [], 1: [card("H", 13), card("C", 2), card("C", 5)], 2: [], 3: [] },
+      // Led suit is spades; player 1 holds no spades, so every card here is a free void discard.
+      currentTrick: [{ player: 0, card: card("S", 4) }],
+      currentTurn: 1,
+    };
+    for (const budgetMs of [15, 50, 250]) {
+      expect(ismctsChooseCard(state, 1, budgetMs, mulberry32(7))).toEqual(card("H", 13));
+    }
+  });
+});
+
 describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winning only at the end", () => {
   it("safe zone (tricks 1-11): leads the highest card, not the lowest", () => {
     const state: GameState = {
@@ -422,6 +444,47 @@ describe('chooseCard — "normal" difficulty leading, card-tracking aware', () =
       "H",
     );
     expect(chooseCard(state, 0, "normal")).toEqual(card("H", 9));
+  });
+
+  // Francisco's other bug report: bots at Hard/Expert sometimes lead a trump "just to lead it,"
+  // with no real tactical reason — exactly the merely-decent (length 3, no master) trump holding
+  // "normal" already knows to hold back (see the test right above). ISMCTS never inherited that
+  // restraint for its own root decision (see `safePositiveLeads`) — a self-consistent 13/13/13/13
+  // deal is needed here (unlike the length-3 "normal" test above) since excluding trump still
+  // leaves several non-trump candidates for the search to actually weigh, rather than collapsing
+  // to one via the early-return `rootCandidates.length === 1` short-circuit.
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): does NOT lead a merely-decent trump holding either", () => {
+    const myHand: Card[] = [
+      card("H", 13),
+      card("H", 5),
+      card("H", 2),
+      card("S", 9),
+      card("S", 3),
+      card("D", 7),
+      card("D", 11),
+      card("D", 2),
+      card("C", 6),
+      card("C", 10),
+      card("C", 4),
+      card("C", 8),
+      card("C", 14),
+    ];
+    const mine = new Set(myHand.map((c) => `${c.suit}${c.rank}`));
+    const rest = createDeck().filter((c) => !mine.has(`${c.suit}${c.rank}`));
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: myHand, 1: rest.slice(0, 13), 2: rest.slice(13, 26), 3: rest.slice(26, 39) },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    for (const budgetMs of [15, 50, 250]) {
+      const led = ismctsChooseCard(state, 0, budgetMs, mulberry32(7));
+      expect(led.suit).not.toBe("H");
+    }
   });
 
   it('"easy" difficulty (heuristic path, no randomness triggered) still leads the flat-highest card', () => {
