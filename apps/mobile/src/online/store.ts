@@ -11,7 +11,7 @@ export type ConnectionStatus = "idle" | "connecting" | "connected" | "error";
  * *names* (playCard, declareTrump, submitBid, requestRedeal, continueToNextHand, ...) for
  * consistency, but each just sends a network message instead of calling `applyAction` locally.
  * `envelope` (not `game`) is the source of truth here — see `pendingDecision(envelope.game,
- * envelope.biddingIndex)`, reused verbatim from the Solo store, which is exactly why this store
+ * envelope.auctionTurn)`, reused verbatim from the Solo store, which is exactly why this store
  * doesn't need its own copy of that logic. There is no bot orchestration, no `waitForIdle`, and no
  * local `applyAction` — the server is authoritative, this store only reflects what it broadcasts. */
 export interface OnlineGameStore {

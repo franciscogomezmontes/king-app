@@ -14,7 +14,7 @@ import {
   shuffle,
   TrumpSuit,
 } from "rules-engine";
-import { currentBidder } from "./auctionOrder";
+import { advanceAuctionTurn, AuctionTurnState, currentBidder, INITIAL_AUCTION_TURN } from "./auctionOrder";
 import { pickBotRosterIndices } from "./botRoster";
 import * as easyBot from "./easyBot";
 
@@ -110,7 +110,7 @@ export type PendingDecision =
   | { kind: "advance" }
   | { kind: "done" };
 
-export function pendingDecision(state: GameState, biddingIndex: number): PendingDecision {
+export function pendingDecision(state: GameState, auctionTurn: AuctionTurnState): PendingDecision {
   switch (state.phase) {
     case "awaiting-deal":
       return { kind: "deal" };
@@ -123,7 +123,7 @@ export function pendingDecision(state: GameState, biddingIndex: number): Pending
       };
     }
     case "auction-bidding": {
-      const bidder = currentBidder(state.dealer, biddingIndex);
+      const bidder = currentBidder(state.dealer, state.positiveSetup!.bids, auctionTurn);
       return bidder !== null ? { kind: "bid", player: bidder } : { kind: "dealer-decide", player: state.dealer };
     }
     case "playing":
@@ -168,7 +168,7 @@ function botAction(state: GameState, decision: Decision, bot: Bot): GameAction |
   }
 }
 
-const RESETS_BIDDING_INDEX = new Set<GameAction["type"]>([
+const RESETS_AUCTION_TURN = new Set<GameAction["type"]>([
   "DEAL_HAND",
   "OPEN_AUCTION",
   "DEALER_DECIDE",
@@ -176,18 +176,28 @@ const RESETS_BIDDING_INDEX = new Set<GameAction["type"]>([
   "REQUEST_REDEAL",
 ]);
 
-/** Applies one decision's result (a real action, or a bid-decline "pass") and keeps biddingIndex
+/** Applies one decision's result (a real action, or a bid-decline "pass") and keeps auction-turn
  * bookkeeping in sync — the single place this logic lives, shared by bot and human moves alike. */
 function applyDecisionResult(
   state: GameState,
-  biddingIndex: number,
+  auctionTurn: AuctionTurnState,
   result: GameAction | "pass",
-): { state: GameState; biddingIndex: number } {
-  if (result === "pass") return { state, biddingIndex: biddingIndex + 1 };
+): { state: GameState; auctionTurn: AuctionTurnState } {
+  if (result === "pass") {
+    // A "pass" is only ever produced in response to a real "bid" decision (see botAction/passBid),
+    // which only exists when currentBidder actually found someone to ask — so this is never null
+    // in practice; the fallback just avoids silently mis-recording a pass no one asked for.
+    const passer = currentBidder(state.dealer, state.positiveSetup!.bids, auctionTurn);
+    return passer === null ? { state, auctionTurn } : { state, auctionTurn: advanceAuctionTurn(auctionTurn, passer, true) };
+  }
   const nextState = applyAction(state, result);
-  const nextBiddingIndex =
-    result.type === "SUBMIT_BID" ? biddingIndex + 1 : RESETS_BIDDING_INDEX.has(result.type) ? 0 : biddingIndex;
-  return { state: nextState, biddingIndex: nextBiddingIndex };
+  const nextTurn =
+    result.type === "SUBMIT_BID"
+      ? advanceAuctionTurn(auctionTurn, result.player, false)
+      : RESETS_AUCTION_TURN.has(result.type)
+        ? INITIAL_AUCTION_TURN
+        : auctionTurn;
+  return { state: nextState, auctionTurn: nextTurn };
 }
 
 function dealStep(state: GameState, random: RandomSource): GameState {
@@ -228,7 +238,7 @@ const DEFAULT_BOT_THINK_MS = 550;
 // jump this constant exists to prevent. A little over CARD_ENTER_MS for a small safety margin.
 const CARD_ANIMATION_SETTLE_MS = 220;
 
-type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTrick) => void;
+type OnStep = (state: GameState, auctionTurn: AuctionTurnState, displayTrick: DisplayTrick) => void;
 
 /**
  * Applies one action (or a bid "pass") and reports it to `onStep` — pausing first to reveal the
@@ -239,14 +249,14 @@ type OnStep = (state: GameState, biddingIndex: number, displayTrick: DisplayTric
  */
 async function applyStepWithReveal(
   current: GameState,
-  biddingIndex: number,
+  auctionTurn: AuctionTurnState,
   result: GameAction | "pass",
   botDelayMs: number,
   difficulty: Difficulty,
   onStep: OnStep,
-): Promise<{ state: GameState; biddingIndex: number }> {
+): Promise<{ state: GameState; auctionTurn: AuctionTurnState }> {
   const tricksBefore = current.completedTricks.length;
-  const stepped = applyDecisionResult(current, biddingIndex, result);
+  const stepped = applyDecisionResult(current, auctionTurn, result);
 
   if (stepped.state.completedTricks.length > tricksBefore) {
     const justCompleted = stepped.state.completedTricks[stepped.state.completedTricks.length - 1];
@@ -259,19 +269,19 @@ async function applyStepWithReveal(
     // rendering normally, showing `justCompleted` as the current trick, for the full reveal pause.
     // The real `stepped.state` (with its real phase) only reaches the UI once that pause — and,
     // if this trick ends the hand, the extra HAND_COMPLETE_TRICK_CLEAR_MS buffer below — elapses.
-    onStep({ ...stepped.state, phase: current.phase }, stepped.biddingIndex, justCompleted.plays);
+    onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, justCompleted.plays);
     if (botDelayMs > 0) {
       await delay(endsHand ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS);
       if (endsHand) {
         // Clear the table — still reporting "playing," so it stays mounted — and give the exit-
         // fade (Table.tsx's TrickSlot) time to actually play before the next call below reports
         // the real "hand-complete" phase and the screen swaps to the scoreboard entirely.
-        onStep({ ...stepped.state, phase: current.phase }, stepped.biddingIndex, stepped.state.currentTrick);
+        onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, stepped.state.currentTrick);
         await delay(HAND_COMPLETE_TRICK_CLEAR_MS);
       }
     }
   }
-  onStep(stepped.state, stepped.biddingIndex, stepped.state.currentTrick);
+  onStep(stepped.state, stepped.auctionTurn, stepped.state.currentTrick);
   // This specific onStep (unlike the ones above) is never followed by a real delay when this play
   // didn't complete a trick — the caller (autoPlay) goes straight into computing the *next*
   // decision. See CARD_ANIMATION_SETTLE_MS: only "expert" card plays need the full settle window;
@@ -297,19 +307,19 @@ async function autoPlay(
   bot: Bot,
   difficulty: Difficulty,
   random: RandomSource,
-  biddingIndex: number,
+  auctionTurn: AuctionTurnState,
   botDelayMs: number,
   onStep: OnStep,
 ): Promise<void> {
   let current = state;
-  let bi = biddingIndex;
+  let turn = auctionTurn;
   for (;;) {
-    const decision = pendingDecision(current, bi);
+    const decision = pendingDecision(current, turn);
     if (decision.kind === "done" || decision.kind === "advance") return;
     if (decision.kind === "deal") {
       current = dealStep(current, random);
-      bi = 0;
-      onStep(current, bi, current.currentTrick);
+      turn = INITIAL_AUCTION_TURN;
+      onStep(current, turn, current.currentTrick);
       continue;
     }
     if (decision.player === humanSeat) return;
@@ -321,16 +331,16 @@ async function autoPlay(
     if (canRequestRedeal(current, decision.player)) {
       const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
       await pacedDecision(botDelayMs, () => redeal);
-      const stepped = await applyStepWithReveal(current, bi, redeal, botDelayMs, difficulty, onStep);
+      const stepped = await applyStepWithReveal(current, turn, redeal, botDelayMs, difficulty, onStep);
       current = stepped.state;
-      bi = stepped.biddingIndex;
+      turn = stepped.auctionTurn;
       continue;
     }
 
     const action = await pacedDecision(botDelayMs, () => botAction(current, decision, bot));
-    const stepped = await applyStepWithReveal(current, bi, action, botDelayMs, difficulty, onStep);
+    const stepped = await applyStepWithReveal(current, turn, action, botDelayMs, difficulty, onStep);
     current = stepped.state;
-    bi = stepped.biddingIndex;
+    turn = stepped.auctionTurn;
   }
 }
 
@@ -360,7 +370,7 @@ export interface GameStore {
    * chosen once at creation (see `createGameStore`) and carried through resume, never reassigned
    * mid-game. */
   botRosterIndices: number[];
-  biddingIndex: number;
+  auctionTurn: AuctionTurnState;
   /** What the table should render right now — normally mirrors game.currentTrick, except it
    * briefly holds a just-completed trick's 4 cards during the reveal pause. */
   displayTrick: DisplayTrick;
@@ -394,7 +404,7 @@ export interface InitialGameState {
   difficulty: Difficulty;
   /** See `GameStore.botRosterIndices`. */
   botRosterIndices: number[];
-  biddingIndex: number;
+  auctionTurn: AuctionTurnState;
 }
 
 function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs: number): GameStoreHook {
@@ -402,16 +412,16 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
   let pending: Promise<void> = Promise.resolve();
 
   const store = create<GameStore>((set, get) => {
-    function onStep(state: GameState, biddingIndex: number, displayTrick: DisplayTrick) {
-      set({ game: state, biddingIndex, displayTrick });
+    function onStep(state: GameState, auctionTurn: AuctionTurnState, displayTrick: DisplayTrick) {
+      set({ game: state, auctionTurn, displayTrick });
     }
 
     async function runStep(result: GameAction | "pass") {
-      const { game, biddingIndex, humanSeat } = get();
+      const { game, auctionTurn, humanSeat } = get();
       // No pre-delay for the human's own move — they already deliberated by tapping — but a
       // trick they complete still gets the same reveal pause as anyone else's.
-      const afterHuman = await applyStepWithReveal(game, biddingIndex, result, botDelayMs, initial.difficulty, onStep);
-      await autoPlay(afterHuman.state, humanSeat, bot, initial.difficulty, random, afterHuman.biddingIndex, botDelayMs, onStep);
+      const afterHuman = await applyStepWithReveal(game, auctionTurn, result, botDelayMs, initial.difficulty, onStep);
+      await autoPlay(afterHuman.state, humanSeat, bot, initial.difficulty, random, afterHuman.auctionTurn, botDelayMs, onStep);
     }
 
     function dispatch(result: GameAction | "pass") {
@@ -423,7 +433,7 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
       humanSeat: initial.humanSeat,
       difficulty: initial.difficulty,
       botRosterIndices: initial.botRosterIndices,
-      biddingIndex: initial.biddingIndex,
+      auctionTurn: initial.auctionTurn,
       displayTrick: initial.game.currentTrick,
       playCard: (card) => dispatch({ type: "PLAY_CARD", player: get().humanSeat, card }),
       declareTrump: (choice) =>
@@ -453,9 +463,9 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
     bot,
     initial.difficulty,
     random,
-    initial.biddingIndex,
+    initial.auctionTurn,
     botDelayMs,
-    (state, biddingIndex, displayTrick) => store.setState({ game: state, biddingIndex, displayTrick }),
+    (state, auctionTurn, displayTrick) => store.setState({ game: state, auctionTurn, displayTrick }),
   );
 
   return store;
@@ -476,7 +486,7 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     // Drawn from the same RandomSource as everything else here, not Math.random() directly — so a
     // seeded test gets the same 3 bots every time, same as it gets the same deals.
     botRosterIndices: pickBotRosterIndices(random, 3, options.excludeAvatarIndex ?? null),
-    biddingIndex: 0,
+    auctionTurn: INITIAL_AUCTION_TURN,
   };
   return buildStore(initial, random, botDelayMs);
 }

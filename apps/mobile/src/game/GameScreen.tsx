@@ -301,7 +301,7 @@ function GameTable({
   const humanSeat = store((s) => s.humanSeat);
   const difficulty = store((s) => s.difficulty);
   const botRosterIndices = store((s) => s.botRosterIndices);
-  const biddingIndex = store((s) => s.biddingIndex);
+  const auctionTurn = store((s) => s.auctionTurn);
   const displayTrick = store((s) => s.displayTrick);
   const playCard = store((s) => s.playCard);
   const declareTrump = store((s) => s.declareTrump);
@@ -333,11 +333,11 @@ function GameTable({
     if (game.phase === "game-complete") {
       clearSoloSession();
     } else {
-      saveSoloSession({ game, humanSeat, difficulty, botRosterIndices, biddingIndex });
+      saveSoloSession({ game, humanSeat, difficulty, botRosterIndices, auctionTurn });
     }
-  }, [game, humanSeat, difficulty, botRosterIndices, biddingIndex]);
+  }, [game, humanSeat, difficulty, botRosterIndices, auctionTurn]);
 
-  const decision = pendingDecision(game, biddingIndex);
+  const decision = pendingDecision(game, auctionTurn);
   const bots = botRosterIndices.map((index) => BOT_ROSTER[index]);
   const seatLabels: Record<PlayerIndex, string> = {
     0: profileName.trim().length > 0 ? profileName : t("game:you"),

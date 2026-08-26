@@ -153,9 +153,9 @@ describe("KingRoom — auction bid-turn order (server-enforced, rules-engine doe
 
     // Correct order: each non-dealer seat bids or passes in turn.
     for (const seat of [firstBidder, (firstBidder + 1) % 4, (firstBidder + 2) % 4] as const) {
-      const before = rooms[0].envelope!.biddingIndex;
+      const before = rooms[0].envelope!.auctionTurn.passedSeats.length;
       rooms[seat].room.send("action", { type: "PASS_BID" });
-      await waitFor(rooms[0], (e) => e.biddingIndex !== before);
+      await waitFor(rooms[0], (e) => e.auctionTurn.passedSeats.length !== before);
     }
 
     dealerRoom.room.send("action", { type: "DEALER_DECIDE", sell: false });

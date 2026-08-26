@@ -5,7 +5,7 @@ import type { Card, TrumpSuit } from "rules-engine";
  * no `player` field (the server always derives that from the sender's assigned seat, never trusts
  * a client-supplied one) and no `deck` field (the server always shuffles its own). `PASS_BID` has
  * no `GameAction` equivalent at all — same as Solo mode's store, a pass only ever moves the
- * server-owned `biddingIndex` forward, it never touches `GameState`.
+ * server-owned `auctionTurn` (game/auctionOrder.ts) forward, it never touches `GameState`.
  */
 export type ClientActionMessage =
   | { type: "DECLARE_TRUMP"; trump: TrumpSuit; direction: "up" | "down"; backwards: boolean }

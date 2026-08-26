@@ -1,4 +1,5 @@
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { useRef, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { colors, fonts, radii, spacing } from "../theme";
 import { Panel } from "./Surface";
 
@@ -24,6 +25,22 @@ export interface InfoTooltipProps {
 // serif face, just not byte-identical to Times.
 const INFO_GLYPH_FONT = Platform.select({ web: "Times New Roman", ios: "Times New Roman", default: "serif" });
 
+const PANEL_WIDTH = 240;
+const SCREEN_MARGIN = 12;
+
+interface Anchor {
+  /** Hang the panel off the badge's left edge (extending further left) instead of its right. */
+  leftward: boolean;
+  /** Never wider than `PANEL_WIDTH`, but shrunk to whatever room actually exists on the chosen
+   * side — picking a side alone isn't enough on a narrow phone: a badge sitting anywhere past
+   * roughly the screen's own midpoint doesn't have `PANEL_WIDTH` of clearance on *either* side, so
+   * the panel needs to size itself down to fit, not just relocate to a side that still overflows a
+   * little less. */
+  width: number;
+}
+
+const DEFAULT_ANCHOR: Anchor = { leftward: false, width: PANEL_WIDTH };
+
 /**
  * A small "(i)" badge that reveals a short explanation on tap, dismissed by tapping it again.
  * Reserves screen space for the explanation only when it's actually open — the alternative to
@@ -33,15 +50,42 @@ const INFO_GLYPH_FONT = Platform.select({ web: "Times New Roman", ios: "Times Ne
  * app avoids `Modal` — see `king-cross-platform-ui`: it behaves inconsistently across Web/Android/
  * iOS, whereas absolute positioning within a parent View is standard RN layout, not a special
  * platform-bridged component.
+ *
+ * Before opening, measures the badge's real on-screen position via `measureInWindow` (its position
+ * *within a parent View* isn't enough — what actually clips the panel is the device viewport) and
+ * picks whichever side of the badge has more room, capping the panel's own width to whatever
+ * that side actually has rather than assuming the full `PANEL_WIDTH` always fits somewhere. A
+ * badge sitting well past the screen's own midpoint (e.g. one following a long hand name like "No
+ * K de Corazones (Rey de Corazones)") doesn't have `PANEL_WIDTH` of clearance on *either* side —
+ * confirmed from a real device screenshot, not just a theoretical case — so "flip to whichever
+ * side isn't clipped" alone isn't sufficient; the width has to adapt too.
  */
 export function InfoTooltip({ content, label, open, onToggle }: InfoTooltipProps) {
+  const badgeRef = useRef<View>(null);
+  const [anchor, setAnchor] = useState<Anchor>(DEFAULT_ANCHOR);
+  const { width: windowWidth } = useWindowDimensions();
+
+  function handlePress() {
+    if (!open) {
+      badgeRef.current?.measureInWindow((x, _y, badgeWidth) => {
+        const spaceRight = windowWidth - (x + badgeWidth) - SCREEN_MARGIN;
+        const spaceLeft = x - SCREEN_MARGIN;
+        setAnchor({
+          leftward: spaceLeft > spaceRight,
+          width: Math.min(PANEL_WIDTH, Math.max(spaceRight, spaceLeft)),
+        });
+      });
+    }
+    onToggle();
+  }
+
   return (
     <View style={styles.wrap}>
-      <Pressable onPress={onToggle} accessibilityLabel={label} style={styles.badge}>
+      <Pressable ref={badgeRef} onPress={handlePress} accessibilityLabel={label} style={styles.badge}>
         <Text style={styles.glyph}>i</Text>
       </Pressable>
       {open && (
-        <Panel style={styles.panel}>
+        <Panel style={[styles.panel, { width: anchor.width }, anchor.leftward ? styles.panelLeftward : styles.panelRightward]}>
           <Text style={styles.text}>{content}</Text>
         </Panel>
       )}
@@ -82,8 +126,6 @@ const styles = StyleSheet.create({
   panel: {
     position: "absolute",
     top: 28,
-    left: 0,
-    width: 240,
     borderWidth: 1,
     borderColor: colors.goldMuted,
     borderRadius: radii.md,
@@ -93,6 +135,12 @@ const styles = StyleSheet.create({
     // this panel above its own immediate siblings (e.g. the badge itself, sibling text) too.
     zIndex: 1000,
     elevation: 12,
+  },
+  panelRightward: {
+    left: 0,
+  },
+  panelLeftward: {
+    right: 0,
   },
   text: {
     color: colors.cream,

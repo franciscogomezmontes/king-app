@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { chooseBid, chooseCard, chooseDealerDecision, chooseTrumpDeclaration, shouldOpenAuction } from "ai-opponent";
 import { applyAction, createDeck, createGame, DEFAULT_GAME_RULES, GameRules, GameState, PlayerIndex, shuffle } from "rules-engine";
+import { INITIAL_AUCTION_TURN } from "../src/game/auctionOrder";
 import { createGameStore, Difficulty, pendingDecision, resumeGameStore } from "../src/game/store";
 
 // Same small deterministic PRNG used throughout this repo's property/integration tests.
@@ -41,8 +42,8 @@ async function driveStoreToCompletion(store: ReturnType<typeof createGameStore>)
     store.getState();
 
   for (;;) {
-    const { game, biddingIndex } = store.getState();
-    const decision = pendingDecision(game, biddingIndex);
+    const { game, auctionTurn } = store.getState();
+    const decision = pendingDecision(game, auctionTurn);
     if (decision.kind === "done") return game;
     if (decision.kind === "advance") {
       continueToNextHand();
@@ -103,7 +104,7 @@ describe("game store — resuming a saved session", () => {
     const savedHands = JSON.parse(JSON.stringify(game.hands));
     const savedCurrentTrick = JSON.parse(JSON.stringify(game.currentTrick));
 
-    const store = resumeGameStore({ game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], biddingIndex: 0 }, { botDelayMs: 0 });
+    const store = resumeGameStore({ game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN }, { botDelayMs: 0 });
 
     // Read synchronously, right after construction — zustand's create() runs its initializer
     // synchronously, so this is the state before any auto-play continuation has had a chance to
@@ -120,7 +121,7 @@ describe("game store — resuming a saved session", () => {
     game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
 
     const store = resumeGameStore(
-      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], biddingIndex: 0 },
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN },
       { random, botDelayMs: 0 },
     );
     const final = await driveStoreToCompletion(store);
@@ -155,8 +156,8 @@ describe("game store — trick-reveal pacing", () => {
     // Hand 1 is always a negative hand (fixed order), so every decision here is just "play" — play
     // through its 13 tricks until the hand completes.
     for (;;) {
-      const { game, biddingIndex } = store.getState();
-      const decision = pendingDecision(game, biddingIndex);
+      const { game, auctionTurn } = store.getState();
+      const decision = pendingDecision(game, auctionTurn);
       if (decision.kind === "advance") break;
       if (decision.kind !== "play" || decision.player !== HUMAN_SEAT) {
         throw new Error(`unexpected decision during a negative hand: ${JSON.stringify(decision)}`);

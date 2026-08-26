@@ -10,15 +10,15 @@ import {
   createGame,
   shuffle,
 } from "rules-engine";
-import { currentBidder } from "../game/auctionOrder";
+import { advanceAuctionTurn, AuctionTurnState, currentBidder, INITIAL_AUCTION_TURN } from "../game/auctionOrder";
 import { ActionErrorMessage, ClientActionMessage } from "./messages";
 import { registerRoomCode, unregisterRoomCode } from "./roomCodes";
 import { toClientView } from "./roomView";
 
-// Bookkeeping mirrors apps/mobile/src/game/store.ts's RESETS_BIDDING_INDEX — kept in sync
+// Bookkeeping mirrors apps/mobile/src/game/store.ts's RESETS_AUCTION_TURN — kept in sync
 // deliberately, not shared code, since these are two different runtimes (one local-authoritative,
 // one network-authoritative) that happen to need identical bookkeeping.
-const RESETS_BIDDING_INDEX = new Set<GameAction["type"]>(["DEAL_HAND", "OPEN_AUCTION", "DEALER_DECIDE", "ADVANCE_HAND"]);
+const RESETS_AUCTION_TURN = new Set<GameAction["type"]>(["DEAL_HAND", "OPEN_AUCTION", "DEALER_DECIDE", "ADVANCE_HAND"]);
 
 interface CreateOptions {
   ruleSet?: Partial<GameRules>;
@@ -46,7 +46,7 @@ export class KingRoom extends Room {
   maxClients = 4;
 
   private game!: GameState;
-  private biddingIndex = 0;
+  private auctionTurn: AuctionTurnState = INITIAL_AUCTION_TURN;
   private seats: (string | null)[] = [null, null, null, null];
   private seatLabels: Record<PlayerIndex, string> = zeroSeatRecord("");
   private seatConnected: Record<PlayerIndex, boolean> = zeroSeatRecord(false);
@@ -95,13 +95,13 @@ export class KingRoom extends Room {
   private dealHand() {
     const deck = shuffle(createDeck(), Math.random);
     this.game = applyAction(this.game, { type: "DEAL_HAND", deck });
-    this.biddingIndex = 0;
+    this.auctionTurn = INITIAL_AUCTION_TURN;
   }
 
   /** Throws if it isn't `seat`'s turn to act in the auction — rules-engine deliberately never
    * enforces this itself (only "bids must strictly increase"), so the server has to. */
   private checkBidTurn(seat: PlayerIndex, isDealerDecide: boolean) {
-    const expected = currentBidder(this.game.dealer, this.biddingIndex);
+    const expected = currentBidder(this.game.dealer, this.game.positiveSetup?.bids ?? [], this.auctionTurn);
     if (isDealerDecide) {
       if (expected !== null || seat !== this.game.dealer) {
         throw new Error(`Seat ${seat} cannot decide the auction yet — bidding isn't finished.`);
@@ -144,7 +144,7 @@ export class KingRoom extends Room {
     try {
       if (message.type === "PASS_BID") {
         this.checkBidTurn(seat, false);
-        this.biddingIndex += 1;
+        this.auctionTurn = advanceAuctionTurn(this.auctionTurn, seat, true);
         this.broadcastState();
         return;
       }
@@ -158,8 +158,8 @@ export class KingRoom extends Room {
       const action = this.buildAction(seat, message);
       this.game = applyAction(this.game, action);
 
-      if (RESETS_BIDDING_INDEX.has(action.type)) this.biddingIndex = 0;
-      else if (action.type === "SUBMIT_BID") this.biddingIndex += 1;
+      if (RESETS_AUCTION_TURN.has(action.type)) this.auctionTurn = INITIAL_AUCTION_TURN;
+      else if (action.type === "SUBMIT_BID") this.auctionTurn = advanceAuctionTurn(this.auctionTurn, seat, false);
 
       // Collapse "hand fully advanced" + "deal the next one" into a single broadcast, mirroring
       // Solo mode's autoPlay chaining a deal automatically once a hand is done.
@@ -180,7 +180,7 @@ export class KingRoom extends Room {
         // Not "state" — that name collides with colyseus's own reserved schema-sync protocol
         // message, even though this room never uses @colyseus/schema at all.
         "envelope",
-        toClientView(this.game, seat, this.biddingIndex, this.seatLabels, this.seatConnected, this.roomCode, this.gameId),
+        toClientView(this.game, seat, this.auctionTurn, this.seatLabels, this.seatConnected, this.roomCode, this.gameId),
       );
     }
   }

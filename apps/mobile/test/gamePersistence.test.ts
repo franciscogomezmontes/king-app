@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createGame, DEFAULT_GAME_RULES } from "rules-engine";
+import { INITIAL_AUCTION_TURN } from "../src/game/auctionOrder";
 import { clearSoloSession, KeyValueStorage, loadSoloSession, saveSoloSession } from "../src/game/persistence";
 import { InitialGameState } from "../src/game/store";
 
@@ -23,7 +24,7 @@ function sampleSession(): InitialGameState {
     humanSeat: 0,
     difficulty: "normal",
     botRosterIndices: [0, 1, 2],
-    biddingIndex: 0,
+    auctionTurn: INITIAL_AUCTION_TURN,
   };
 }
 
@@ -40,7 +41,7 @@ describe("solo game persistence", () => {
     await saveSoloSession(session, storage);
     const loaded = await loadSoloSession(storage);
 
-    expect(loaded).toEqual({ version: 2, ...session });
+    expect(loaded).toEqual({ version: 3, ...session });
   });
 
   it("clearSoloSession removes the saved session", async () => {
@@ -53,11 +54,15 @@ describe("solo game persistence", () => {
   it("a later save overwrites the earlier one, not appends", async () => {
     const storage = fakeStorage();
     await saveSoloSession(sampleSession(), storage);
-    const second = { ...sampleSession(), biddingIndex: 3, difficulty: "hard" as const };
+    const second = {
+      ...sampleSession(),
+      auctionTurn: { passedSeats: [1 as const], lastAsked: 1 as const },
+      difficulty: "hard" as const,
+    };
     await saveSoloSession(second, storage);
 
     const loaded = await loadSoloSession(storage);
-    expect(loaded?.biddingIndex).toBe(3);
+    expect(loaded?.auctionTurn).toEqual({ passedSeats: [1], lastAsked: 1 });
     expect(loaded?.difficulty).toBe("hard");
   });
 

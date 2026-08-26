@@ -1,10 +1,11 @@
 import type { GameState, PlayerIndex } from "rules-engine";
+import type { AuctionTurnState } from "../game/auctionOrder";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 
 /** Everything one connected client needs to render the game — a wrapper around `GameState`, never
  * a fork of it (CLAUDE.md principle 1: rules-engine's shape is the only source of truth). Room
- * code, seat↔name mapping, connection status, `biddingIndex`, and `gameId` all live here instead
+ * code, seat↔name mapping, connection status, `auctionTurn`, and `gameId` all live here instead
  * of being smuggled into `GameState` itself. */
 export interface ClientEnvelope {
   /** Redacted for everyone except `mySeat` — see `toClientView`. */
@@ -15,7 +16,7 @@ export interface ClientEnvelope {
   handSizes: Record<PlayerIndex, number>;
   /** Server-owned — a "pass" during bidding never touches `GameState` (rules-engine has no
    * concept of it), so each client can't derive this locally the way Solo mode's store does. */
-  biddingIndex: number;
+  auctionTurn: AuctionTurnState;
   mySeat: PlayerIndex;
   seatLabels: Record<PlayerIndex, string>;
   seatConnected: Record<PlayerIndex, boolean>;
@@ -31,7 +32,7 @@ export interface ClientEnvelope {
 export function toClientView(
   game: GameState,
   viewerSeat: PlayerIndex,
-  biddingIndex: number,
+  auctionTurn: AuctionTurnState,
   seatLabels: Record<PlayerIndex, string>,
   seatConnected: Record<PlayerIndex, boolean>,
   roomCode: string,
@@ -48,7 +49,7 @@ export function toClientView(
   return {
     game: { ...game, hands: redactedHands },
     handSizes,
-    biddingIndex,
+    auctionTurn,
     mySeat: viewerSeat,
     seatLabels: { ...seatLabels },
     seatConnected: { ...seatConnected },

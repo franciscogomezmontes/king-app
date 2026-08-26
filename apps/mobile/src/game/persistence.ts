@@ -5,7 +5,10 @@ const STORAGE_KEY = "king:soloGame:v1";
 // Bumped 1 -> 2 when InitialGameState gained botRosterIndices (bot avatar identities) — an old
 // saved session predates that field, so loadSoloSession's version check below rejects it (falls
 // back to the resume-or-new prompt) instead of resuming into a session with no roster assigned.
-const SOLO_SESSION_VERSION = 2 as const;
+// Bumped 2 -> 3 when the old bare `biddingIndex: number` became `auctionTurn: AuctionTurnState` (a
+// real multi-round auction with pass-elimination, replacing "one bid-or-pass each") — an old saved
+// session's `biddingIndex` field is meaningless under the new shape.
+const SOLO_SESSION_VERSION = 3 as const;
 
 /** The slice of AsyncStorage's API this module actually uses — narrow enough that tests can pass
  * a small in-memory fake instead of the real native module. Mirrors scorekeeper/persistence.ts. */

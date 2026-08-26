@@ -322,8 +322,8 @@ function ActiveOnlineGame({
     return <SafeAreaView style={styles.container} />;
   }
 
-  const { game, biddingIndex, mySeat, seatLabels, seatConnected, handSizes } = envelope;
-  const decision = pendingDecision(game, biddingIndex);
+  const { game, auctionTurn, mySeat, seatLabels, seatConnected, handSizes } = envelope;
+  const decision = pendingDecision(game, auctionTurn);
 
   function exit() {
     leaveGame();

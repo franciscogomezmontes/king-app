@@ -1,4 +1,5 @@
 import type { Card, GameState, PlayerIndex, TrumpSuit } from "rules-engine";
+import type { AuctionTurnState } from "../game/auctionOrder";
 
 /**
  * Mirrors apps/server/src/rooms/roomView.ts's `ClientEnvelope` and apps/server/src/rooms/
@@ -12,7 +13,7 @@ export interface ClientEnvelope {
   /** Real per-seat card counts — use this for opponents' remaining-card display, never
    * `game.hands[seat].length` (that's 0 for every redacted seat). */
   handSizes: Record<PlayerIndex, number>;
-  biddingIndex: number;
+  auctionTurn: AuctionTurnState;
   mySeat: PlayerIndex;
   seatLabels: Record<PlayerIndex, string>;
   seatConnected: Record<PlayerIndex, boolean>;
