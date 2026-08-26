@@ -60,13 +60,46 @@ const LAST_TRICK_CARD_SCALE = 0.72;
 // a real (short) phone viewport without scrolling. Same `scale` mechanism CardBack (0.82) and the
 // last-trick corner (0.72, above) already use — this is a live trick card, so it stays closer to
 // full size than either of those, but still meaningfully smaller than the player's own hand.
-// Bigger than a card actually in a player's own hand, and deliberately overlapping (see
-// `clusterMiddleRow`/`bottomSlotWrap`'s negative margins below) rather than the old fully
-// non-overlapping cross — per Francisco's request: these are about to matter more once real
+// Bigger than a card actually in a player's own hand, and deliberately overlapping (see the
+// `SLOT_LAYOUT`/`SLOT_OVERLAP` constants below) rather than the old fully non-overlapping cross —
+// per Francisco's request: these are about to matter more once real
 // per-suit card-face art lands (figures/pips need to actually read at a glance), and overlap is
 // what keeps 4 now-much-bigger cards from ballooning the table's total footprint the way 4
 // non-overlapping ones would.
 const TRICK_CARD_SCALE = 1.1;
+
+// The cluster used to be a flex column (top slot, then a middleRow of left/right, then a bottom
+// slot), each pulled up to overlap the previous one via negative margins — simple, but it makes
+// the *paint order* (and therefore which card visually sits in front where two overlap) a fixed
+// function of compass position (top always behind, bottom always in front) no matter which player
+// actually played first. Reported live: the trick's leader (left seat, played first) ended up
+// visually *behind* a card played later (top seat) — backwards; a real pile of thrown-down cards
+// stacks in the order they landed, not by which side of the table they came from. Fixed by
+// switching every slot to an absolutely-positioned sibling within one shared stacking context
+// (`cluster`), with these constants replicating the exact same visual footprint the old flex
+// layout produced, so this is a paint-order fix, not a re-layout — and a single `zIndex` per slot,
+// computed from `currentTrick`'s own play order below, now actually governs who's in front.
+const SLOT_WIDTH = CARD_WIDTH * TRICK_CARD_SCALE;
+const SLOT_HEIGHT = CARD_HEIGHT * TRICK_CARD_SCALE;
+const SLOT_GAP = 4;
+const SLOT_OVERLAP = SLOT_HEIGHT * 0.42;
+const CLUSTER_WIDTH = SLOT_WIDTH * 2 + SLOT_GAP;
+const MIDDLE_ROW_TOP = SLOT_HEIGHT - SLOT_OVERLAP;
+const BOTTOM_ROW_TOP = MIDDLE_ROW_TOP + SLOT_HEIGHT - SLOT_OVERLAP;
+const CLUSTER_HEIGHT = BOTTOM_ROW_TOP + SLOT_HEIGHT;
+const CENTERED_LEFT = (CLUSTER_WIDTH - SLOT_WIDTH) / 2;
+
+const SLOT_LAYOUT: Record<SeatPosition, { left: number; top: number }> = {
+  top: { left: CENTERED_LEFT, top: 0 },
+  left: { left: 0, top: MIDDLE_ROW_TOP },
+  right: { left: SLOT_WIDTH + SLOT_GAP, top: MIDDLE_ROW_TOP },
+  bottom: { left: CENTERED_LEFT, top: BOTTOM_ROW_TOP },
+};
+
+const FELT_WELL_WIDTH = 24;
+const FELT_WELL_HEIGHT = 18;
+const FELT_WELL_LEFT = SLOT_WIDTH + SLOT_GAP / 2 - FELT_WELL_WIDTH / 2;
+const FELT_WELL_TOP = MIDDLE_ROW_TOP + (SLOT_HEIGHT - FELT_WELL_HEIGHT) / 2;
 
 /**
  * A fixed, small tilt + nudge per compass position — cards thrown down "casually," like a real
@@ -156,12 +189,13 @@ function TrickSlot({ card, position }: { card: Card | null; position: SeatPositi
 /**
  * The table view: the 3 opponents arranged left/top/right around the human (always at the
  * bottom, via `seatPosition`), each showing their remaining card count and face-down trick pile.
- * The current trick's cards collect at the center of the table, laid out in a small non-
- * overlapping plus/cross (one slot per compass direction) rather than stacked on top of each
- * other — every card's corner index stays fully visible at all times, including the first card
- * played, not just whichever one ends up on top of a pile. Each slot's card gets a small, fixed
- * tilt (`TRICK_CARD_TILT`) so the cluster reads as cards actually thrown down, not a perfect grid.
- * An empty trick is a quiet felt well, not an em-dash.
+ * The current trick's cards collect at the center of the table, laid out in a small plus/cross
+ * (one slot per compass direction) that deliberately overlaps at the edges — cards thrown down
+ * like a real hand would, not a perfect non-overlapping grid. Which card visually sits in front
+ * where two overlap follows actual play order (see the `zIndexByPosition` map below), not compass
+ * position — the trick's leader always ends up furthest back, each later play stacks further in
+ * front, regardless of which seat played it. Each slot's card also gets a small, fixed tilt
+ * (`TRICK_CARD_TILT`) on top of that. An empty trick is a quiet felt well, not an em-dash.
  */
 export function Table({
   humanSeat,
@@ -179,6 +213,13 @@ export function Table({
   const opponents = ([0, 1, 2, 3] as PlayerIndex[]).filter((seat) => seat !== humanSeat);
   const seatAt = new Map(opponents.map((seat) => [seatPosition(seat, humanSeat), seat]));
   const playAt = new Map(currentTrick.map((play) => [seatPosition(play.player, humanSeat), play.card]));
+  // 1-based play order (the leader is 1, i.e. furthest back) — every slot's own `zIndex` below
+  // reads from this instead of a fixed per-compass-position stacking order. A slot with no card
+  // played yet this trick just never looks anything up here; its `?? 0` default never matters
+  // since there's nothing in it to paint.
+  const zIndexByPosition = new Map<SeatPosition, number>(
+    currentTrick.map((play, index) => [seatPosition(play.player, humanSeat), index + 1]),
+  );
 
   function renderOpponent(position: "top" | "left" | "right") {
     const seat = seatAt.get(position);
@@ -197,7 +238,13 @@ export function Table({
   }
 
   function renderTrickCard(position: SeatPosition) {
-    return <TrickSlot card={playAt.get(position) ?? null} position={position} />;
+    const layout = SLOT_LAYOUT[position];
+    const zIndex = zIndexByPosition.get(position) ?? 0;
+    return (
+      <View style={[styles.trickSlotAbs, { left: layout.left, top: layout.top, zIndex, elevation: zIndex }]}>
+        <TrickSlot card={playAt.get(position) ?? null} position={position} />
+      </View>
+    );
   }
 
   return (
@@ -207,14 +254,10 @@ export function Table({
         {renderOpponent("left")}
         <View style={styles.cluster}>
           {renderTrickCard("top")}
-          <View style={styles.clusterMiddleRow}>
-            {renderTrickCard("left")}
-            <View style={styles.clusterGap}>
-              {currentTrick.length === 0 && <View style={styles.feltWell} />}
-            </View>
-            {renderTrickCard("right")}
-          </View>
-          <View style={styles.bottomSlotWrap}>{renderTrickCard("bottom")}</View>
+          {renderTrickCard("left")}
+          {renderTrickCard("right")}
+          {renderTrickCard("bottom")}
+          {currentTrick.length === 0 && <View style={[styles.feltWell, styles.feltWellAbs]} />}
         </View>
         {renderOpponent("right")}
       </View>
@@ -272,32 +315,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     width: "100%",
   },
+  // Fixed-size and `position: "relative"` — the shared stacking context every trick slot below is
+  // absolutely positioned within, so a single `zIndex` per slot (see `renderTrickCard`) reliably
+  // governs paint order between all 4 of them, not just next-door siblings. `CLUSTER_WIDTH`/
+  // `CLUSTER_HEIGHT` reproduce the exact footprint the old flex-plus-negative-margins layout
+  // produced — this is a paint-order fix, not a re-layout.
   cluster: {
-    alignItems: "center",
+    position: "relative",
+    width: CLUSTER_WIDTH,
+    height: CLUSTER_HEIGHT,
   },
-  clusterMiddleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    // Pulls the left/right cards up under the top card's bottom edge — a real overlap, not the
-    // old fully non-overlapping cross — per Francisco's explicit "se pueden traslapar" request.
-    marginTop: -CARD_HEIGHT * TRICK_CARD_SCALE * 0.42,
-  },
-  clusterGap: {
-    width: 4,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bottomSlotWrap: {
-    // Same overlap, one more level: pulls the "own play" slot up under the left/right row.
-    marginTop: -CARD_HEIGHT * TRICK_CARD_SCALE * 0.42,
+  trickSlotAbs: {
+    position: "absolute",
   },
   feltWell: {
-    width: 24,
-    height: 18,
+    width: FELT_WELL_WIDTH,
+    height: FELT_WELL_HEIGHT,
     borderRadius: 9,
     backgroundColor: colors.feltWell,
     borderWidth: 1,
     borderColor: colors.goldMuted,
+  },
+  feltWellAbs: {
+    position: "absolute",
+    left: FELT_WELL_LEFT,
+    top: FELT_WELL_TOP,
   },
   trickSlot: {
     width: CARD_WIDTH * TRICK_CARD_SCALE,
