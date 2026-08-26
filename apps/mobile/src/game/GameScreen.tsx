@@ -17,6 +17,7 @@ import {
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
 import {
+  AuctionLog,
   AuctionSummary,
   BackButton,
   Button,
@@ -30,6 +31,7 @@ import {
   Switch,
   Table,
   Toast,
+  WinCelebration,
   colors,
   fonts,
   layout,
@@ -45,6 +47,8 @@ import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, resumeGameStor
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 const HUMAN_SEAT: PlayerIndex = 0;
+// See WinCelebration/GameOverView — same require-a-local-asset pattern as botRoster.ts's avatars.
+const KING_CELEBRATION_IMAGE = require("../../assets/celebration/kingOfHearts.jpg");
 
 export interface GameScreenProps {
   onExit: () => void;
@@ -302,6 +306,7 @@ function GameTable({
   const difficulty = store((s) => s.difficulty);
   const botRosterIndices = store((s) => s.botRosterIndices);
   const auctionTurn = store((s) => s.auctionTurn);
+  const auctionLog = store((s) => s.auctionLog);
   const displayTrick = store((s) => s.displayTrick);
   const playCard = store((s) => s.playCard);
   const declareTrump = store((s) => s.declareTrump);
@@ -333,9 +338,9 @@ function GameTable({
     if (game.phase === "game-complete") {
       clearSoloSession();
     } else {
-      saveSoloSession({ game, humanSeat, difficulty, botRosterIndices, auctionTurn });
+      saveSoloSession({ game, humanSeat, difficulty, botRosterIndices, auctionTurn, auctionLog });
     }
-  }, [game, humanSeat, difficulty, botRosterIndices, auctionTurn]);
+  }, [game, humanSeat, difficulty, botRosterIndices, auctionTurn, auctionLog]);
 
   const decision = pendingDecision(game, auctionTurn);
   const bots = botRosterIndices.map((index) => BOT_ROSTER[index]);
@@ -475,6 +480,22 @@ function GameTable({
         </View>
         {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
           <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
+        )}
+        {/* Visible for as long as an auction is underway (including every bot's own turn to bid or
+         * pass, which previously happened with nothing shown at all) — from the moment the dealer
+         * opens it through their final accept/decline call. Once trump is actually declared and
+         * play starts, AuctionSummary above takes over as the persistent recap. */}
+        {game.handType === "positive" && game.positiveSetup !== null && game.positiveSetup.auctionOpened && game.phase !== "playing" && (
+          <AuctionLog
+            entries={auctionLog}
+            seatLabels={seatLabels}
+            humanSeat={HUMAN_SEAT}
+            pendingDecider={
+              decision.kind === "dealer-decide"
+                ? { seat: decision.player, tricks: highestBid(game.positiveSetup.bids)?.tricks ?? 0 }
+                : null
+            }
+          />
         )}
         {eligibleForRedeal && (
           <Panel style={styles.panel}>
@@ -695,6 +716,12 @@ function GameOverView({
     winners.length === 1
       ? t("game:scoreboard.winner", { name: seatLabels[winners[0]] })
       : t("game:scoreboard.tie", { names: winners.map((seat) => seatLabels[seat]).join(", ") });
+  // Only the human winning outright (not part of a tie) gets the celebration — see WinCelebration.
+  const humanWinsAlone = winners.length === 1 && winners[0] === HUMAN_SEAT;
+  // Local, not persisted: flips once the celebration has played itself out (auto-hold timeout or a
+  // tap), so it never replays on a re-render of this same finished game (e.g. toggling the score
+  // summary elsewhere in the app doesn't remount this screen, but state changes here still would).
+  const [celebrationDismissed, setCelebrationDismissed] = useState(false);
 
   // Fires once when this view mounts (i.e. once per finished game) — folds the just-finished
   // game into the same shared history Scorekeeper saves to, so both modes show up in one place.
@@ -719,6 +746,14 @@ function GameOverView({
 
   return (
     <SafeAreaView style={styles.container}>
+      {humanWinsAlone && (
+        <WinCelebration
+          visible={!celebrationDismissed}
+          message={t("game:winCelebration.message", { name: seatLabels[HUMAN_SEAT] })}
+          imageSource={KING_CELEBRATION_IMAGE}
+          onDismiss={() => setCelebrationDismissed(true)}
+        />
+      )}
       <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={[styles.content, { maxWidth: layout.maxContentWidth }]}

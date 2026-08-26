@@ -25,6 +25,7 @@ function sampleSession(): InitialGameState {
     difficulty: "normal",
     botRosterIndices: [0, 1, 2],
     auctionTurn: INITIAL_AUCTION_TURN,
+    auctionLog: [],
   };
 }
 
@@ -41,7 +42,7 @@ describe("solo game persistence", () => {
     await saveSoloSession(session, storage);
     const loaded = await loadSoloSession(storage);
 
-    expect(loaded).toEqual({ version: 3, ...session });
+    expect(loaded).toEqual({ version: 4, ...session });
   });
 
   it("clearSoloSession removes the saved session", async () => {

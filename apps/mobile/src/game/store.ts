@@ -9,11 +9,13 @@ import {
   GameAction,
   GameRules,
   GameState,
+  highestBid,
   PlayerIndex,
   RandomSource,
   shuffle,
   TrumpSuit,
 } from "rules-engine";
+import type { AuctionLogEntry } from "ui-kit";
 import { advanceAuctionTurn, AuctionTurnState, currentBidder, INITIAL_AUCTION_TURN } from "./auctionOrder";
 import { pickBotRosterIndices } from "./botRoster";
 import * as easyBot from "./easyBot";
@@ -176,19 +178,33 @@ const RESETS_AUCTION_TURN = new Set<GameAction["type"]>([
   "REQUEST_REDEAL",
 ]);
 
+// Narrower than RESETS_AUCTION_TURN: OPEN_AUCTION and DEALER_DECIDE reset the *turn-order*
+// bookkeeping (a fresh bidding rotation / bidding is over) but are exactly the two actions the
+// *log* needs to append an entry for, not clear — a hand can only ever open one auction
+// (positiveSetup.auctionOpened guards a second), so nothing meaningful could be lost by not
+// resetting on those. Only a genuinely new hand's dealing (or a redeal) should blank the log.
+const RESETS_AUCTION_LOG = new Set<GameAction["type"]>(["DEAL_HAND", "ADVANCE_HAND", "REQUEST_REDEAL"]);
+
 /** Applies one decision's result (a real action, or a bid-decline "pass") and keeps auction-turn
- * bookkeeping in sync — the single place this logic lives, shared by bot and human moves alike. */
+ * bookkeeping (and the human-readable auction transcript — see ui-kit's AuctionLog) in sync — the
+ * single place this logic lives, shared by bot and human moves alike. */
 function applyDecisionResult(
   state: GameState,
   auctionTurn: AuctionTurnState,
+  auctionLog: AuctionLogEntry[],
   result: GameAction | "pass",
-): { state: GameState; auctionTurn: AuctionTurnState } {
+): { state: GameState; auctionTurn: AuctionTurnState; auctionLog: AuctionLogEntry[] } {
   if (result === "pass") {
     // A "pass" is only ever produced in response to a real "bid" decision (see botAction/passBid),
     // which only exists when currentBidder actually found someone to ask — so this is never null
     // in practice; the fallback just avoids silently mis-recording a pass no one asked for.
     const passer = currentBidder(state.dealer, state.positiveSetup!.bids, auctionTurn);
-    return passer === null ? { state, auctionTurn } : { state, auctionTurn: advanceAuctionTurn(auctionTurn, passer, true) };
+    if (passer === null) return { state, auctionTurn, auctionLog };
+    return {
+      state,
+      auctionTurn: advanceAuctionTurn(auctionTurn, passer, true),
+      auctionLog: [...auctionLog, { type: "pass", player: passer }],
+    };
   }
   const nextState = applyAction(state, result);
   const nextTurn =
@@ -197,7 +213,27 @@ function applyDecisionResult(
       : RESETS_AUCTION_TURN.has(result.type)
         ? INITIAL_AUCTION_TURN
         : auctionTurn;
-  return { state: nextState, auctionTurn: nextTurn };
+  const nextLog: AuctionLogEntry[] = RESETS_AUCTION_LOG.has(result.type)
+    ? []
+    : result.type === "OPEN_AUCTION"
+      ? [...auctionLog, { type: "open", dealer: result.player }]
+      : result.type === "SUBMIT_BID"
+        ? [...auctionLog, { type: "bid", player: result.player, tricks: result.tricks }]
+        : result.type === "DEALER_DECIDE"
+          ? [
+              ...auctionLog,
+              {
+                type: "decide",
+                dealer: result.player,
+                // Derived from the resolved state, not the raw `sell` flag `result` carries — when
+                // ruleSet.auctionMustSell forces acceptance, `sell` could be false yet the auction
+                // still resolves as accepted (see resolveDealerDecision in rules-engine).
+                accepted: nextState.positiveSetup!.auction !== null,
+                tricks: nextState.positiveSetup!.auction?.bid ?? highestBid(state.positiveSetup!.bids)?.tricks ?? 0,
+              },
+            ]
+          : auctionLog;
+  return { state: nextState, auctionTurn: nextTurn, auctionLog: nextLog };
 }
 
 function dealStep(state: GameState, random: RandomSource): GameState {
@@ -238,7 +274,12 @@ const DEFAULT_BOT_THINK_MS = 550;
 // jump this constant exists to prevent. A little over CARD_ENTER_MS for a small safety margin.
 const CARD_ANIMATION_SETTLE_MS = 220;
 
-type OnStep = (state: GameState, auctionTurn: AuctionTurnState, displayTrick: DisplayTrick) => void;
+type OnStep = (
+  state: GameState,
+  auctionTurn: AuctionTurnState,
+  auctionLog: AuctionLogEntry[],
+  displayTrick: DisplayTrick,
+) => void;
 
 /**
  * Applies one action (or a bid "pass") and reports it to `onStep` — pausing first to reveal the
@@ -250,13 +291,14 @@ type OnStep = (state: GameState, auctionTurn: AuctionTurnState, displayTrick: Di
 async function applyStepWithReveal(
   current: GameState,
   auctionTurn: AuctionTurnState,
+  auctionLog: AuctionLogEntry[],
   result: GameAction | "pass",
   botDelayMs: number,
   difficulty: Difficulty,
   onStep: OnStep,
-): Promise<{ state: GameState; auctionTurn: AuctionTurnState }> {
+): Promise<{ state: GameState; auctionTurn: AuctionTurnState; auctionLog: AuctionLogEntry[] }> {
   const tricksBefore = current.completedTricks.length;
-  const stepped = applyDecisionResult(current, auctionTurn, result);
+  const stepped = applyDecisionResult(current, auctionTurn, auctionLog, result);
 
   if (stepped.state.completedTricks.length > tricksBefore) {
     const justCompleted = stepped.state.completedTricks[stepped.state.completedTricks.length - 1];
@@ -269,19 +311,19 @@ async function applyStepWithReveal(
     // rendering normally, showing `justCompleted` as the current trick, for the full reveal pause.
     // The real `stepped.state` (with its real phase) only reaches the UI once that pause — and,
     // if this trick ends the hand, the extra HAND_COMPLETE_TRICK_CLEAR_MS buffer below — elapses.
-    onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, justCompleted.plays);
+    onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, stepped.auctionLog, justCompleted.plays);
     if (botDelayMs > 0) {
       await delay(endsHand ? HAND_COMPLETE_REVEAL_MS : TRICK_REVEAL_MS);
       if (endsHand) {
         // Clear the table — still reporting "playing," so it stays mounted — and give the exit-
         // fade (Table.tsx's TrickSlot) time to actually play before the next call below reports
         // the real "hand-complete" phase and the screen swaps to the scoreboard entirely.
-        onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, stepped.state.currentTrick);
+        onStep({ ...stepped.state, phase: current.phase }, stepped.auctionTurn, stepped.auctionLog, stepped.state.currentTrick);
         await delay(HAND_COMPLETE_TRICK_CLEAR_MS);
       }
     }
   }
-  onStep(stepped.state, stepped.auctionTurn, stepped.state.currentTrick);
+  onStep(stepped.state, stepped.auctionTurn, stepped.auctionLog, stepped.state.currentTrick);
   // This specific onStep (unlike the ones above) is never followed by a real delay when this play
   // didn't complete a trick — the caller (autoPlay) goes straight into computing the *next*
   // decision. See CARD_ANIMATION_SETTLE_MS: only "expert" card plays need the full settle window;
@@ -308,18 +350,21 @@ async function autoPlay(
   difficulty: Difficulty,
   random: RandomSource,
   auctionTurn: AuctionTurnState,
+  auctionLog: AuctionLogEntry[],
   botDelayMs: number,
   onStep: OnStep,
 ): Promise<void> {
   let current = state;
   let turn = auctionTurn;
+  let log = auctionLog;
   for (;;) {
     const decision = pendingDecision(current, turn);
     if (decision.kind === "done" || decision.kind === "advance") return;
     if (decision.kind === "deal") {
       current = dealStep(current, random);
       turn = INITIAL_AUCTION_TURN;
-      onStep(current, turn, current.currentTrick);
+      log = [];
+      onStep(current, turn, log, current.currentTrick);
       continue;
     }
     if (decision.player === humanSeat) return;
@@ -331,16 +376,18 @@ async function autoPlay(
     if (canRequestRedeal(current, decision.player)) {
       const redeal: GameAction = { type: "REQUEST_REDEAL", player: decision.player, deck: shuffle(createDeck(), random) };
       await pacedDecision(botDelayMs, () => redeal);
-      const stepped = await applyStepWithReveal(current, turn, redeal, botDelayMs, difficulty, onStep);
+      const stepped = await applyStepWithReveal(current, turn, log, redeal, botDelayMs, difficulty, onStep);
       current = stepped.state;
       turn = stepped.auctionTurn;
+      log = stepped.auctionLog;
       continue;
     }
 
     const action = await pacedDecision(botDelayMs, () => botAction(current, decision, bot));
-    const stepped = await applyStepWithReveal(current, turn, action, botDelayMs, difficulty, onStep);
+    const stepped = await applyStepWithReveal(current, turn, log, action, botDelayMs, difficulty, onStep);
     current = stepped.state;
     turn = stepped.auctionTurn;
+    log = stepped.auctionLog;
   }
 }
 
@@ -371,6 +418,9 @@ export interface GameStore {
    * mid-game. */
   botRosterIndices: number[];
   auctionTurn: AuctionTurnState;
+  /** Chronological transcript of the current positive hand's auction (open/bid/pass/decide), if
+   * any — see ui-kit's AuctionLog. Reset to `[]` at the start of every new hand. */
+  auctionLog: AuctionLogEntry[];
   /** What the table should render right now — normally mirrors game.currentTrick, except it
    * briefly holds a just-completed trick's 4 cards during the reveal pause. */
   displayTrick: DisplayTrick;
@@ -405,6 +455,8 @@ export interface InitialGameState {
   /** See `GameStore.botRosterIndices`. */
   botRosterIndices: number[];
   auctionTurn: AuctionTurnState;
+  /** See `GameStore.auctionLog`. */
+  auctionLog: AuctionLogEntry[];
 }
 
 function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs: number): GameStoreHook {
@@ -412,16 +464,26 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
   let pending: Promise<void> = Promise.resolve();
 
   const store = create<GameStore>((set, get) => {
-    function onStep(state: GameState, auctionTurn: AuctionTurnState, displayTrick: DisplayTrick) {
-      set({ game: state, auctionTurn, displayTrick });
+    function onStep(state: GameState, auctionTurn: AuctionTurnState, auctionLog: AuctionLogEntry[], displayTrick: DisplayTrick) {
+      set({ game: state, auctionTurn, auctionLog, displayTrick });
     }
 
     async function runStep(result: GameAction | "pass") {
-      const { game, auctionTurn, humanSeat } = get();
+      const { game, auctionTurn, auctionLog, humanSeat } = get();
       // No pre-delay for the human's own move — they already deliberated by tapping — but a
       // trick they complete still gets the same reveal pause as anyone else's.
-      const afterHuman = await applyStepWithReveal(game, auctionTurn, result, botDelayMs, initial.difficulty, onStep);
-      await autoPlay(afterHuman.state, humanSeat, bot, initial.difficulty, random, afterHuman.auctionTurn, botDelayMs, onStep);
+      const afterHuman = await applyStepWithReveal(game, auctionTurn, auctionLog, result, botDelayMs, initial.difficulty, onStep);
+      await autoPlay(
+        afterHuman.state,
+        humanSeat,
+        bot,
+        initial.difficulty,
+        random,
+        afterHuman.auctionTurn,
+        afterHuman.auctionLog,
+        botDelayMs,
+        onStep,
+      );
     }
 
     function dispatch(result: GameAction | "pass") {
@@ -434,6 +496,7 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
       difficulty: initial.difficulty,
       botRosterIndices: initial.botRosterIndices,
       auctionTurn: initial.auctionTurn,
+      auctionLog: initial.auctionLog,
       displayTrick: initial.game.currentTrick,
       playCard: (card) => dispatch({ type: "PLAY_CARD", player: get().humanSeat, card }),
       declareTrump: (choice) =>
@@ -464,8 +527,9 @@ function buildStore(initial: InitialGameState, random: RandomSource, botDelayMs:
     initial.difficulty,
     random,
     initial.auctionTurn,
+    initial.auctionLog,
     botDelayMs,
-    (state, auctionTurn, displayTrick) => store.setState({ game: state, auctionTurn, displayTrick }),
+    (state, auctionTurn, auctionLog, displayTrick) => store.setState({ game: state, auctionTurn, auctionLog, displayTrick }),
   );
 
   return store;
@@ -487,6 +551,7 @@ export function createGameStore(options: NewGameOptions): GameStoreHook {
     // seeded test gets the same 3 bots every time, same as it gets the same deals.
     botRosterIndices: pickBotRosterIndices(random, 3, options.excludeAvatarIndex ?? null),
     auctionTurn: INITIAL_AUCTION_TURN,
+    auctionLog: [],
   };
   return buildStore(initial, random, botDelayMs);
 }

@@ -104,7 +104,10 @@ describe("game store — resuming a saved session", () => {
     const savedHands = JSON.parse(JSON.stringify(game.hands));
     const savedCurrentTrick = JSON.parse(JSON.stringify(game.currentTrick));
 
-    const store = resumeGameStore({ game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN }, { botDelayMs: 0 });
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
+      { botDelayMs: 0 },
+    );
 
     // Read synchronously, right after construction — zustand's create() runs its initializer
     // synchronously, so this is the state before any auto-play continuation has had a chance to
@@ -121,7 +124,7 @@ describe("game store — resuming a saved session", () => {
     game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
 
     const store = resumeGameStore(
-      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN },
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
       { random, botDelayMs: 0 },
     );
     const final = await driveStoreToCompletion(store);
