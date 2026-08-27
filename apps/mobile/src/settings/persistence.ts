@@ -17,7 +17,13 @@ const KNOWN_CARD_BACK_STYLES: ReadonlyArray<Settings["cardBackStyle"]> = ["royal
 // Mirrors ui-kit's own PlayingCard.tsx `FACE_CARD_STYLES` — same deliberately-local-copy reasoning
 // as `KNOWN_CARD_BACK_STYLES` above (a runtime `import` from "ui-kit" breaks Vitest's SSR
 // transform). Keep in sync if a face-card style is ever added, renamed, or removed.
-const KNOWN_FACE_CARD_STYLES: ReadonlyArray<Settings["faceCardStyle"]> = ["artdeco", "retrato", "grafico", "folclor"];
+const KNOWN_FACE_CARD_STYLES: ReadonlyArray<Settings["faceCardStyle"]> = [
+  "basico",
+  "artdeco",
+  "retrato",
+  "grafico",
+  "folclor",
+];
 
 /** Loads the player's saved settings, if any. Never throws into the caller — a missing key,
  * malformed JSON, or a `version` from an older/incompatible shape all just resolve to the

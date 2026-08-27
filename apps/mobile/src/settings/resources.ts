@@ -20,6 +20,7 @@ export const SETTINGS_RESOURCES = {
       faceCardStyle: {
         title: "Card Style",
         hint: "Choose the illustrated design for face cards (King, Queen, Jack, Ace) and the shared background for number cards.",
+        basico: "Basic",
         artdeco: "Imperial Art Deco",
         retrato: "Royal Portrait",
         grafico: "Bold Graphic",
@@ -57,6 +58,7 @@ export const SETTINGS_RESOURCES = {
       faceCardStyle: {
         title: "Estilo de Cartas",
         hint: "Elige el diseño ilustrado para las figuras (Rey, Reina, Jota, As) y el fondo compartido de las cartas numéricas.",
+        basico: "Básico",
         artdeco: "Art Decó Imperial",
         retrato: "Retrato Real",
         grafico: "Gráfico Audaz",
@@ -94,6 +96,7 @@ export const SETTINGS_RESOURCES = {
       faceCardStyle: {
         title: "Style de Cartes",
         hint: "Choisis le design illustré pour les figures (Roi, Dame, Valet, As) et le fond partagé des cartes numérotées.",
+        basico: "Basique",
         artdeco: "Art Déco Impérial",
         retrato: "Portrait Royal",
         grafico: "Graphique Audacieux",
@@ -131,6 +134,7 @@ export const SETTINGS_RESOURCES = {
       faceCardStyle: {
         title: "Kartenstil",
         hint: "Wähle das illustrierte Design für Bildkarten (König, Dame, Bube, As) und den gemeinsamen Hintergrund für Zahlenkarten.",
+        basico: "Einfach",
         artdeco: "Kaiserliches Art déco",
         retrato: "Königliches Porträt",
         grafico: "Kühne Grafik",

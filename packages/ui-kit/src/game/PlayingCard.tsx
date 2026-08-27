@@ -25,11 +25,13 @@ function hasFaceCardArt(rank: Rank): boolean {
 
 export type CardFace = "fan" | "table";
 
-export type FaceCardStyle = "artdeco" | "retrato" | "grafico" | "folclor";
+export type FaceCardStyle = "basico" | "artdeco" | "retrato" | "grafico" | "folclor";
 
 /** In display order for a settings picker — see SettingsScreen.tsx's own face-card-style section,
- * the same pattern CardBack.tsx's `CARD_BACK_STYLES` already established. */
-export const FACE_CARD_STYLES: FaceCardStyle[] = ["artdeco", "retrato", "grafico", "folclor"];
+ * the same pattern CardBack.tsx's `CARD_BACK_STYLES` already established. "basico" first — the
+ * plain code-drawn rendering this app always had, kept as an option for a player who'd rather
+ * have less visual noise than any of the 4 illustrated decks (Francisco's explicit request). */
+export const FACE_CARD_STYLES: FaceCardStyle[] = ["basico", "artdeco", "retrato", "grafico", "folclor"];
 
 /** First-run default for a player who's never opened Settings — chosen for legibility at this
  * component's actual on-screen size (`face="table"` is 72x104px), not just how the art reads
@@ -51,11 +53,20 @@ function faceCardKey(card: Card): string {
   return `${card.suit}${FACE_RANK_KEY[card.rank]}`;
 }
 
+function isIllustrated(style: FaceCardStyle): style is IllustratedFaceCardStyle {
+  return style !== "basico";
+}
+
 // The finished face-card/number-background art lives under apps/mobile/assets (not inside this
 // package), same cross-package-boundary reasoning as CardBack.tsx's own CARD_BACK_IMAGES doc
 // comment: apps/mobile is (today) this package's only consumer, so a plain relative require()
 // reaching across is simpler than duplicating the files into ui-kit's own assets.
-const FACE_CARD_IMAGES: Record<FaceCardStyle, Record<string, ImageSourcePropType>> = {
+// "basico" has no art of its own (see the render logic below, gated on `showArt`) — these maps
+// only ever get indexed by the 4 illustrated styles, so `Exclude` keeps that structurally true
+// instead of forcing a meaningless "basico" entry just to satisfy a plain `Record<FaceCardStyle,...>`.
+type IllustratedFaceCardStyle = Exclude<FaceCardStyle, "basico">;
+
+const FACE_CARD_IMAGES: Record<IllustratedFaceCardStyle, Record<string, ImageSourcePropType>> = {
   artdeco: {
     SK: require("../../../../apps/mobile/assets/facecards/artdeco/SK.jpg"),
     SQ: require("../../../../apps/mobile/assets/facecards/artdeco/SQ.jpg"),
@@ -130,7 +141,7 @@ const FACE_CARD_IMAGES: Record<FaceCardStyle, Record<string, ImageSourcePropType
   },
 };
 
-const NUMBER_BG_IMAGES: Record<FaceCardStyle, ImageSourcePropType> = {
+const NUMBER_BG_IMAGES: Record<IllustratedFaceCardStyle, ImageSourcePropType> = {
   artdeco: require("../../../../apps/mobile/assets/facecards/artdeco/numberBg.jpg"),
   retrato: require("../../../../apps/mobile/assets/facecards/retrato/numberBg.jpg"),
   grafico: require("../../../../apps/mobile/assets/facecards/grafico/numberBg.jpg"),
@@ -216,8 +227,27 @@ export function PlayingCard({
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
   const isKingHearts = card.rank === 13 && card.suit === "H";
+  const isAceHearts = card.rank === 14 && card.suit === "H";
   const dim = DIM[face];
   const label = rankLabel(card.rank, t);
+  const illustrated = isIllustrated(faceCardStyle);
+  const isFaceCardRank = hasFaceCardArt(card.rank);
+  // `face="table"`'s center content: illustrated styles only ever need to add NumberPips on top
+  // of the background Image above (the image itself already *is* the King/Queen/Jack/Ace face);
+  // "basico" has no background art at all, so it draws everything itself, exactly as this app
+  // did before any illustrated deck existed.
+  let centerContent = null;
+  if (illustrated) {
+    if (!isFaceCardRank) centerContent = <NumberPips rank={card.rank} suit={card.suit} color={color} />;
+  } else if (isFaceCardRank) {
+    centerContent = COURT_RANKS.has(card.rank) ? (
+      <CourtFace label={label} suit={card.suit} color={color} special={isKingHearts} />
+    ) : (
+      <AcePip suit={card.suit} color={color} special={isAceHearts} />
+    );
+  } else {
+    centerContent = <NumberPips rank={card.rank} suit={card.suit} color={color} />;
+  }
 
   const card_ = (
     <View style={[styles.shadowWrap, { width: dim.width, height: dim.height }, style]}>
@@ -231,25 +261,22 @@ export function PlayingCard({
           isKingHearts && face === "table" && styles.cardKingHearts,
         ]}
       >
+        {/* Background art now renders on `face="fan"` too (Francisco's explicit request — the
+         * player's own hand used to stay plain cream even with an illustrated style active),
+         * not just `face="table"`; only the *content* below (full pips / court face / a second
+         * corner index) stays table-only, same as before — a 48px-wide, 60%+-overlapped fan card
+         * has no room for that level of detail regardless of style. */}
+        {illustrated && (
+          <Image
+            source={isFaceCardRank ? FACE_CARD_IMAGES[faceCardStyle][faceCardKey(card)] : NUMBER_BG_IMAGES[faceCardStyle]}
+            style={[styles.faceArt, { width: dim.width, height: dim.height }]}
+            resizeMode="cover"
+          />
+        )}
         <CornerIndex label={label} suit={card.suit} color={color} large={face === "fan"} />
         {face === "table" && (
           <>
-            {hasFaceCardArt(card.rank) ? (
-              <Image
-                source={FACE_CARD_IMAGES[faceCardStyle][faceCardKey(card)]}
-                style={[styles.faceArt, { width: dim.width, height: dim.height }]}
-                resizeMode="cover"
-              />
-            ) : (
-              <>
-                <Image
-                  source={NUMBER_BG_IMAGES[faceCardStyle]}
-                  style={[styles.faceArt, { width: dim.width, height: dim.height }]}
-                  resizeMode="cover"
-                />
-                <NumberPips rank={card.rank} suit={card.suit} color={color} />
-              </>
-            )}
+            {centerContent}
             <CornerIndex label={label} suit={card.suit} color={color} inverted />
           </>
         )}
@@ -350,6 +377,38 @@ function NumberPips({ rank, suit, color }: { rank: Rank; suit: Card["suit"]; col
   );
 }
 
+// Only reachable for `faceCardStyle === "basico"` (see `isIllustrated`) — the plain code-drawn
+// rendering this app used before any illustrated deck existed, kept as the deliberately
+// lower-visual-noise option (Francisco's explicit request: "por si alguien no quiere tanto ruido
+// en su juego").
+function AcePip({ suit, color, special }: { suit: Card["suit"]; color: string; special: boolean }) {
+  return (
+    <View style={styles.aceCenter} pointerEvents="none">
+      {special && <View style={styles.aceRing} />}
+      <Text style={[styles.acePip, { color, fontSize: special ? 38 : 34 }]}>{SUIT_SYMBOLS[suit]}</Text>
+    </View>
+  );
+}
+
+function CourtFace({
+  label,
+  suit,
+  color,
+  special,
+}: {
+  label: string;
+  suit: Card["suit"];
+  color: string;
+  special: boolean;
+}) {
+  return (
+    <View style={styles.courtWell} pointerEvents="none">
+      <Text style={[styles.courtRank, { color: special ? colors.gold : color }]}>{label}</Text>
+      <Text style={[styles.courtSuit, { color }]}>{SUIT_SYMBOLS[suit]}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   // Depth layer — see the component doc comment for why this has to be a separate view from
   // `card` rather than shadow props added directly to it. Values tuned for a card resting flat on
@@ -376,11 +435,20 @@ const styles = StyleSheet.create({
   cardKingHearts: {
     borderColor: colors.gold,
   },
+  // The opaque cream backing (not just the fixed `card` background showing through) is what
+  // keeps this readable regardless of what's directly underneath — an illustrated style's own
+  // background art, whether a number card's decorative frame or a face card's own baked-in
+  // corner index, extends right up to the corner exactly where this needs to sit. A plain patch
+  // here reads as "the index always has a clean spot," the same convention the reference card
+  // Francisco pointed to already uses (ornament confined to the corners the index doesn't touch).
+  // Harmless no-op for "basico" — same solid color as its own already-plain `card` background.
   corner: {
     position: "absolute",
     alignItems: "center",
     width: 20,
     zIndex: 2,
+    backgroundColor: colors.cream,
+    borderRadius: radii.sm,
   },
   cornerLarge: {
     width: 28,
@@ -442,6 +510,46 @@ const styles = StyleSheet.create({
   pip: {
     width: 16,
     textAlign: "center",
+    includeFontPadding: false,
+  },
+  // "basico" only (see AcePip/CourtFace above).
+  aceCenter: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aceRing: {
+    position: "absolute",
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+  },
+  acePip: {
+    fontSize: 34,
+    lineHeight: 38,
+    includeFontPadding: false,
+  },
+  courtWell: {
+    position: "absolute",
+    top: 22,
+    bottom: 22,
+    left: 20,
+    right: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  courtRank: {
+    fontFamily: fonts.display,
+    fontSize: 36,
+    lineHeight: 38,
+    includeFontPadding: false,
+  },
+  courtSuit: {
+    fontSize: 20,
+    lineHeight: 22,
+    marginTop: 3,
     includeFontPadding: false,
   },
   // Illustrated face-card art (King/Queen/Jack/Ace) or the number cards' shared background —
