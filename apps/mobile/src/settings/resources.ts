@@ -17,6 +17,14 @@ export const SETTINGS_RESOURCES = {
         laurel: "Laurel",
         sunburst: "Sunburst",
       },
+      faceCardStyle: {
+        title: "Card Style",
+        hint: "Choose the illustrated design for face cards (King, Queen, Jack, Ace) and the shared background for number cards.",
+        artdeco: "Imperial Art Deco",
+        retrato: "Royal Portrait",
+        grafico: "Bold Graphic",
+        folclor: "Vintage Folklore",
+      },
       gameRules: {
         title: "Game Rules",
         hint: "Set these once — they apply to every new Solo vs Computer game, and prefill an Online room's rules when you host (still adjustable per room). More rules will show up here as they're added.",
@@ -45,6 +53,14 @@ export const SETTINGS_RESOURCES = {
         medallion: "Medallón",
         laurel: "Laurel",
         sunburst: "Destellos",
+      },
+      faceCardStyle: {
+        title: "Estilo de Cartas",
+        hint: "Elige el diseño ilustrado para las figuras (Rey, Reina, Jota, As) y el fondo compartido de las cartas numéricas.",
+        artdeco: "Art Decó Imperial",
+        retrato: "Retrato Real",
+        grafico: "Gráfico Audaz",
+        folclor: "Folclor Vintage",
       },
       gameRules: {
         title: "Reglas del Juego",
@@ -75,6 +91,14 @@ export const SETTINGS_RESOURCES = {
         laurel: "Laurier",
         sunburst: "Éclat",
       },
+      faceCardStyle: {
+        title: "Style de Cartes",
+        hint: "Choisis le design illustré pour les figures (Roi, Dame, Valet, As) et le fond partagé des cartes numérotées.",
+        artdeco: "Art Déco Impérial",
+        retrato: "Portrait Royal",
+        grafico: "Graphique Audacieux",
+        folclor: "Folklore Vintage",
+      },
       gameRules: {
         title: "Règles du Jeu",
         hint: "À régler une fois — s'applique à chaque nouvelle partie Solo contre l'Ordinateur, et préremplit les règles d'une salle En Ligne quand tu héberges (toujours ajustable par salle). D'autres règles apparaîtront ici au fur et à mesure qu'elles seront ajoutées.",
@@ -103,6 +127,14 @@ export const SETTINGS_RESOURCES = {
         medallion: "Medaillon",
         laurel: "Lorbeer",
         sunburst: "Strahlenkranz",
+      },
+      faceCardStyle: {
+        title: "Kartenstil",
+        hint: "Wähle das illustrierte Design für Bildkarten (König, Dame, Bube, As) und den gemeinsamen Hintergrund für Zahlenkarten.",
+        artdeco: "Kaiserliches Art déco",
+        retrato: "Königliches Porträt",
+        grafico: "Kühne Grafik",
+        folclor: "Vintage-Folklore",
       },
       gameRules: {
         title: "Spielregeln",

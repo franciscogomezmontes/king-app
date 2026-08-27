@@ -22,6 +22,7 @@ import {
   BackButton,
   Button,
   CardBackStyle,
+  FaceCardStyle,
   Hand,
   Panel,
   Scoreboard,
@@ -107,6 +108,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       <ResumedGame
         session={stage.session}
         cardBackStyle={settings.cardBackStyle}
+        faceCardStyle={settings.faceCardStyle}
         saveHistoryEnabled={settings.saveHistoryEnabled}
         showScoreSummary={settings.showScoreSummary}
         profileName={profile.name}
@@ -125,6 +127,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       difficulty={stage.difficulty}
       gameRules={settings.gameRules}
       cardBackStyle={settings.cardBackStyle}
+      faceCardStyle={settings.faceCardStyle}
       saveHistoryEnabled={settings.saveHistoryEnabled}
       showScoreSummary={settings.showScoreSummary}
       profileName={profile.name}
@@ -206,6 +209,7 @@ function ActiveGame({
   difficulty,
   gameRules,
   cardBackStyle,
+  faceCardStyle,
   saveHistoryEnabled,
   showScoreSummary,
   profileName,
@@ -215,6 +219,7 @@ function ActiveGame({
   difficulty: Difficulty;
   gameRules: GameRules;
   cardBackStyle: CardBackStyle;
+  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
   showScoreSummary: boolean;
   profileName: string;
@@ -238,6 +243,7 @@ function ActiveGame({
     <GameTable
       store={store}
       cardBackStyle={cardBackStyle}
+      faceCardStyle={faceCardStyle}
       saveHistoryEnabled={saveHistoryEnabled}
       showScoreSummary={showScoreSummary}
       profileName={profileName}
@@ -252,6 +258,7 @@ function ActiveGame({
 function ResumedGame({
   session,
   cardBackStyle,
+  faceCardStyle,
   saveHistoryEnabled,
   showScoreSummary,
   profileName,
@@ -260,6 +267,7 @@ function ResumedGame({
 }: {
   session: SoloGameSession;
   cardBackStyle: CardBackStyle;
+  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
   showScoreSummary: boolean;
   profileName: string;
@@ -271,6 +279,7 @@ function ResumedGame({
     <GameTable
       store={store}
       cardBackStyle={cardBackStyle}
+      faceCardStyle={faceCardStyle}
       saveHistoryEnabled={saveHistoryEnabled}
       showScoreSummary={showScoreSummary}
       profileName={profileName}
@@ -286,6 +295,7 @@ function ResumedGame({
 function GameTable({
   store,
   cardBackStyle,
+  faceCardStyle,
   saveHistoryEnabled,
   showScoreSummary,
   profileName,
@@ -294,6 +304,7 @@ function GameTable({
 }: {
   store: GameStoreHook;
   cardBackStyle: CardBackStyle;
+  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
   showScoreSummary: boolean;
   profileName: string;
@@ -459,6 +470,7 @@ function GameTable({
             lastTrick={showLastTrick ? lastCompletedTrick : null}
             lastTrickLabel={t("game:lastTrick.label")}
             cardBackStyle={cardBackStyle}
+            faceCardStyle={faceCardStyle}
           />
           {/* Trump/auction decisions happen before any card is played this hand, so the table's
            * center is always genuinely empty here — an overlay on top of it, not a fourth block
@@ -512,6 +524,7 @@ function GameTable({
           interactive={isHumanPlaying}
           explainIllegal={explainIllegal}
           onIllegalTap={handleIllegalTap}
+          faceCardStyle={faceCardStyle}
         />
       </ScrollView>
     </SafeAreaView>

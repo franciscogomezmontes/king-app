@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { GameRules } from "rules-engine";
-import type { CardBackStyle } from "ui-kit";
+import type { CardBackStyle, FaceCardStyle } from "ui-kit";
 import { loadSettings, saveSettings } from "./persistence";
 import { DEFAULT_SETTINGS, Settings } from "./types";
 
@@ -9,6 +9,7 @@ export interface UseSettingsResult {
   loading: boolean;
   settings: Settings;
   setCardBackStyle: (style: CardBackStyle) => void;
+  setFaceCardStyle: (style: FaceCardStyle) => void;
   setGameRule: (key: keyof GameRules, value: boolean) => void;
   setSaveHistoryEnabled: (value: boolean) => void;
   setShowScoreSummary: (value: boolean) => void;
@@ -43,6 +44,14 @@ export function useSettings(): UseSettingsResult {
     });
   }
 
+  function setFaceCardStyle(faceCardStyle: FaceCardStyle) {
+    setSettings((prev) => {
+      const next: Settings = { ...prev, faceCardStyle };
+      saveSettings(next);
+      return next;
+    });
+  }
+
   function setGameRule(key: keyof GameRules, value: boolean) {
     setSettings((prev) => {
       const next: Settings = { ...prev, gameRules: { ...prev.gameRules, [key]: value } };
@@ -67,5 +76,5 @@ export function useSettings(): UseSettingsResult {
     });
   }
 
-  return { loading, settings, setCardBackStyle, setGameRule, setSaveHistoryEnabled, setShowScoreSummary };
+  return { loading, settings, setCardBackStyle, setFaceCardStyle, setGameRule, setSaveHistoryEnabled, setShowScoreSummary };
 }

@@ -6,7 +6,7 @@ import { colors, fonts, radii, spacing } from "../theme";
 import { Avatar } from "./Avatar";
 import { CardBackStyle } from "./CardBack";
 import { OpponentSeat } from "./OpponentSeat";
-import { CARD_HEIGHT, CARD_WIDTH, FAN_CARD_WIDTH, PlayingCard } from "./PlayingCard";
+import { CARD_HEIGHT, CARD_WIDTH, DEFAULT_FACE_CARD_STYLE, FaceCardStyle, FAN_CARD_WIDTH, PlayingCard } from "./PlayingCard";
 import { seatPosition, SeatPosition } from "./seatPosition";
 import { TrickPile } from "./TrickPile";
 
@@ -34,6 +34,11 @@ export interface TableProps {
   /** The player's Settings choice for opponents' face-down card backs. Defaults to CardBack's own
    * default ("royal") when omitted. */
   cardBackStyle?: CardBackStyle;
+  /** The player's Settings choice for King/Queen/Jack/Ace art (and the number cards' shared
+   * background) on every face-up card shown here — the live trick cluster and the "last trick"
+   * reference corner. Defaults to `DEFAULT_FACE_CARD_STYLE` when omitted (Online mode doesn't
+   * wire this up yet, same as `cardBackStyle` above). */
+  faceCardStyle?: FaceCardStyle;
 }
 
 function cardKey(card: Card): string {
@@ -126,7 +131,15 @@ const TRICK_CARD_TILT: Record<SeatPosition, { rotate: string; translateX: number
  * actual card-to-card or card-to-empty transitions animate. `position`'s only job is picking this
  * slot's fixed tilt (`TRICK_CARD_TILT`) — it never varies per card, only per compass slot.
  */
-function TrickSlot({ card, position }: { card: Card | null; position: SeatPosition }) {
+function TrickSlot({
+  card,
+  position,
+  faceCardStyle,
+}: {
+  card: Card | null;
+  position: SeatPosition;
+  faceCardStyle: FaceCardStyle;
+}) {
   const [displayCard, setDisplayCard] = useState(card);
   const mounted = useRef(false);
   const opacity = useRef(new Animated.Value(card ? 1 : 0)).current;
@@ -179,7 +192,7 @@ function TrickSlot({ card, position }: { card: Card | null; position: SeatPositi
             transform: [{ scale }, { rotate: tilt.rotate }, { translateX: tilt.translateX }, { translateY: tilt.translateY }],
           }}
         >
-          <PlayingCard card={displayCard} scale={TRICK_CARD_SCALE} />
+          <PlayingCard card={displayCard} faceCardStyle={faceCardStyle} scale={TRICK_CARD_SCALE} />
         </Animated.View>
       )}
     </View>
@@ -209,6 +222,7 @@ export function Table({
   lastTrick,
   lastTrickLabel,
   cardBackStyle,
+  faceCardStyle = DEFAULT_FACE_CARD_STYLE,
 }: TableProps) {
   const opponents = ([0, 1, 2, 3] as PlayerIndex[]).filter((seat) => seat !== humanSeat);
   const seatAt = new Map(opponents.map((seat) => [seatPosition(seat, humanSeat), seat]));
@@ -242,7 +256,7 @@ export function Table({
     const zIndex = zIndexByPosition.get(position) ?? 0;
     return (
       <View style={[styles.trickSlotAbs, { left: layout.left, top: layout.top, zIndex, elevation: zIndex }]}>
-        <TrickSlot card={playAt.get(position) ?? null} position={position} />
+        <TrickSlot card={playAt.get(position) ?? null} position={position} faceCardStyle={faceCardStyle} />
       </View>
     );
   }
@@ -284,7 +298,13 @@ export function Table({
           )}
           <View style={styles.lastTrickGrid}>
             {lastTrick.map((play, index) => (
-              <PlayingCard key={`${play.player}-${index}`} card={play.card} face="fan" scale={LAST_TRICK_CARD_SCALE} />
+              <PlayingCard
+                key={`${play.player}-${index}`}
+                card={play.card}
+                face="fan"
+                faceCardStyle={faceCardStyle}
+                scale={LAST_TRICK_CARD_SCALE}
+              />
             ))}
           </View>
         </View>

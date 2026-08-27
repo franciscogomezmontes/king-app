@@ -7,8 +7,10 @@ import {
   Button,
   CARD_BACK_STYLES,
   CardBack,
+  FACE_CARD_STYLES,
   GAME_RULE_TOGGLE_KEYS,
   InfoTooltip,
+  PlayingCard,
   Surface,
   Switch,
   colors,
@@ -35,7 +37,8 @@ export interface SettingsScreenProps {
  * yet. */
 export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
   const { t } = useTranslation();
-  const { settings, setCardBackStyle, setGameRule, setSaveHistoryEnabled, setShowScoreSummary } = useSettings();
+  const { settings, setCardBackStyle, setFaceCardStyle, setGameRule, setSaveHistoryEnabled, setShowScoreSummary } =
+    useSettings();
   // Which row's "(i)" tooltip is currently open, if any — only one at a time, and only that row's
   // own Surface gets elevated above its sibling rows below it (see InfoTooltip's own `open` doc
   // comment for why the elevation has to happen on the row, not just the tooltip itself).
@@ -73,6 +76,25 @@ export function SettingsScreen({ onExit, onHowToPlay }: SettingsScreenProps) {
                   <CardBack variant={variant} />
                   <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
                     {t(`settings:cardBack.${variant}`)}
+                  </Text>
+                </Surface>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <Text style={styles.sectionTitle}>{t("settings:faceCardStyle.title")}</Text>
+        <Text style={styles.sectionHint}>{t("settings:faceCardStyle.hint")}</Text>
+
+        <View style={styles.optionRow}>
+          {FACE_CARD_STYLES.map((variant) => {
+            const selected = settings.faceCardStyle === variant;
+            return (
+              <Pressable key={variant} onPress={() => setFaceCardStyle(variant)}>
+                <Surface style={[styles.optionCard, selected && styles.optionCardSelected]}>
+                  <PlayingCard card={{ suit: "S", rank: 13 }} face="table" faceCardStyle={variant} />
+                  <Text style={[styles.optionLabel, selected && styles.optionLabelSelected]}>
+                    {t(`settings:faceCardStyle.${variant}`)}
                   </Text>
                 </Surface>
               </Pressable>

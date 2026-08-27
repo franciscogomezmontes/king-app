@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { StyleSheet, View } from "react-native";
 import type { Card } from "rules-engine";
-import { FAN_CARD_HEIGHT, FAN_CARD_WIDTH, PlayingCard } from "./PlayingCard";
+import { DEFAULT_FACE_CARD_STYLE, FaceCardStyle, FAN_CARD_HEIGHT, FAN_CARD_WIDTH, PlayingCard } from "./PlayingCard";
 
 function sameCard(a: Card, b: Card): boolean {
   return a.suit === b.suit && a.rank === b.rank;
@@ -77,6 +77,13 @@ export interface HandProps {
   /** Called instead of `onPlay` when `explainIllegal` is on and the tapped card isn't actually
    * legal right now. Omit only if `explainIllegal` is never true. */
   onIllegalTap?: (card: Card) => void;
+  /** Forwarded to each card's own `PlayingCard` (see its doc comment) — unused today since
+   * `face="fan"` never renders face-card art, only the corner index, but PlayingCard's own prop
+   * has no default, so this has to resolve to *some* real value on every call. Optional here
+   * (unlike PlayingCard's own required prop) so an existing caller that hasn't been updated to
+   * read this from Settings yet — e.g. Online mode, which doesn't wire up card-back style either
+   * — still compiles and renders correctly with the app's own default. */
+  faceCardStyle?: FaceCardStyle;
 }
 
 /**
@@ -87,7 +94,15 @@ export interface HandProps {
  * `explainIllegal` is on, in which case every card gets that treatment uniformly (see its own doc
  * comment above).
  */
-export function Hand({ cards, legalCards, onPlay, interactive, explainIllegal = false, onIllegalTap }: HandProps) {
+export function Hand({
+  cards,
+  legalCards,
+  onPlay,
+  interactive,
+  explainIllegal = false,
+  onIllegalTap,
+  faceCardStyle = DEFAULT_FACE_CARD_STYLE,
+}: HandProps) {
   const [containerWidth, setContainerWidth] = useState(0);
   const sorted = sortForDisplay(cards);
   const { scale, sliver } = computeLayout(sorted.length, containerWidth);
@@ -132,6 +147,7 @@ export function Hand({ cards, legalCards, onPlay, interactive, explainIllegal = 
               <PlayingCard
                 card={card}
                 face="fan"
+                faceCardStyle={faceCardStyle}
                 scale={scale}
                 disabled={!canPlay}
                 highlighted={canPlay}
