@@ -65,19 +65,6 @@ describe("settings persistence", () => {
     expect(loaded.saveHistoryEnabled).toBe(DEFAULT_SETTINGS.saveHistoryEnabled);
   });
 
-  it("falls back to the default face-card style for a renamed/removed faceCardStyle value instead of keeping the stale one", async () => {
-    const storage = fakeStorage();
-    // Simulates a blob saved back when this field could have had a since-renamed/removed value —
-    // PlayingCard.tsx's FACE_CARD_IMAGES has no entry for it any more.
-    await storage.setItem(
-      "king:settings:v1",
-      JSON.stringify({ ...DEFAULT_SETTINGS, faceCardStyle: "renaissance" }),
-    );
-    const loaded = await loadSettings(storage);
-    expect(loaded.faceCardStyle).toBe(DEFAULT_SETTINGS.faceCardStyle);
-    expect(loaded.saveHistoryEnabled).toBe(DEFAULT_SETTINGS.saveHistoryEnabled);
-  });
-
   it("fills in a missing gameRules field with its default instead of undefined (forward compatibility)", async () => {
     const storage = fakeStorage();
     // Simulates a blob saved before some future GameRules field existed: gameRules is present

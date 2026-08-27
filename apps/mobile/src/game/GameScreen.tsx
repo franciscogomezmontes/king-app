@@ -22,7 +22,6 @@ import {
   BackButton,
   Button,
   CardBackStyle,
-  FaceCardStyle,
   Hand,
   Panel,
   Scoreboard,
@@ -108,9 +107,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       <ResumedGame
         session={stage.session}
         cardBackStyle={settings.cardBackStyle}
-        faceCardStyle={settings.faceCardStyle}
         saveHistoryEnabled={settings.saveHistoryEnabled}
-        showScoreSummary={settings.showScoreSummary}
         profileName={profile.name}
         profileAvatarIndex={profile.avatarIndex}
         onExit={onExit}
@@ -127,9 +124,7 @@ export function GameScreen({ onExit, autoResume = false }: GameScreenProps) {
       difficulty={stage.difficulty}
       gameRules={settings.gameRules}
       cardBackStyle={settings.cardBackStyle}
-      faceCardStyle={settings.faceCardStyle}
       saveHistoryEnabled={settings.saveHistoryEnabled}
-      showScoreSummary={settings.showScoreSummary}
       profileName={profile.name}
       profileAvatarIndex={profile.avatarIndex}
       onExit={onExit}
@@ -209,9 +204,7 @@ function ActiveGame({
   difficulty,
   gameRules,
   cardBackStyle,
-  faceCardStyle,
   saveHistoryEnabled,
-  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
@@ -219,9 +212,7 @@ function ActiveGame({
   difficulty: Difficulty;
   gameRules: GameRules;
   cardBackStyle: CardBackStyle;
-  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
-  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -243,9 +234,7 @@ function ActiveGame({
     <GameTable
       store={store}
       cardBackStyle={cardBackStyle}
-      faceCardStyle={faceCardStyle}
       saveHistoryEnabled={saveHistoryEnabled}
-      showScoreSummary={showScoreSummary}
       profileName={profileName}
       profileAvatarIndex={profileAvatarIndex}
       onExit={onExit}
@@ -258,18 +247,14 @@ function ActiveGame({
 function ResumedGame({
   session,
   cardBackStyle,
-  faceCardStyle,
   saveHistoryEnabled,
-  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
 }: {
   session: SoloGameSession;
   cardBackStyle: CardBackStyle;
-  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
-  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -279,9 +264,7 @@ function ResumedGame({
     <GameTable
       store={store}
       cardBackStyle={cardBackStyle}
-      faceCardStyle={faceCardStyle}
       saveHistoryEnabled={saveHistoryEnabled}
-      showScoreSummary={showScoreSummary}
       profileName={profileName}
       profileAvatarIndex={profileAvatarIndex}
       onExit={onExit}
@@ -295,18 +278,14 @@ function ResumedGame({
 function GameTable({
   store,
   cardBackStyle,
-  faceCardStyle,
   saveHistoryEnabled,
-  showScoreSummary,
   profileName,
   profileAvatarIndex,
   onExit,
 }: {
   store: GameStoreHook;
   cardBackStyle: CardBackStyle;
-  faceCardStyle: FaceCardStyle;
   saveHistoryEnabled: boolean;
-  showScoreSummary: boolean;
   profileName: string;
   profileAvatarIndex: number | null;
   onExit: () => void;
@@ -330,6 +309,10 @@ function GameTable({
   // Local, not persisted — a per-session display preference, not game state. Defaults on: the
   // point is to make it discoverable, not to add a hunt-for-the-setting step.
   const [showLastTrick, setShowLastTrick] = useState(true);
+  // Also local, not persisted — same rationale as showLastTrick above, and lets the player flip it
+  // on/off mid-game (Francisco's request) instead of only from Settings before the game starts.
+  // Off by default: most players don't need it visible every hand.
+  const [showScoreSummary, setShowScoreSummary] = useState(false);
   // Full results-so-far table, on demand — without it, a player can only see the running score as
   // bare numbers in ScorePanel and has to wait for a hand to finish to see the hand-by-hand table.
   const [showScoreboard, setShowScoreboard] = useState(false);
@@ -445,9 +428,15 @@ function GameTable({
           <View style={styles.difficultyBadge}>
             <Text style={styles.difficultyText}>{t(`game:difficulty.${difficulty}`)}</Text>
           </View>
-          <View style={styles.lastTrickToggle}>
-            <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
-            <Switch value={showLastTrick} onValueChange={setShowLastTrick} />
+          <View style={styles.toggleColumn}>
+            <View style={styles.lastTrickToggle}>
+              <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
+              <Switch value={showLastTrick} onValueChange={setShowLastTrick} />
+            </View>
+            <View style={styles.lastTrickToggle}>
+              <Text style={styles.headerToggle}>{t("game:scoreSummary.toggle")}</Text>
+              <Switch value={showScoreSummary} onValueChange={setShowScoreSummary} />
+            </View>
           </View>
         </View>
         <ScorePanel
@@ -470,7 +459,6 @@ function GameTable({
             lastTrick={showLastTrick ? lastCompletedTrick : null}
             lastTrickLabel={t("game:lastTrick.label")}
             cardBackStyle={cardBackStyle}
-            faceCardStyle={faceCardStyle}
           />
           {/* Trump/auction decisions happen before any card is played this hand, so the table's
            * center is always genuinely empty here — an overlay on top of it, not a fourth block
@@ -524,7 +512,6 @@ function GameTable({
           interactive={isHumanPlaying}
           explainIllegal={explainIllegal}
           onIllegalTap={handleIllegalTap}
-          faceCardStyle={faceCardStyle}
         />
       </ScrollView>
     </SafeAreaView>
@@ -841,6 +828,10 @@ const styles = StyleSheet.create({
   lastTrickToggle: {
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.xs,
+  },
+  toggleColumn: {
+    alignItems: "flex-end",
     gap: spacing.xs,
   },
   headerLinks: {

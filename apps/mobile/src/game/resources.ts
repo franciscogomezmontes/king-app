@@ -53,6 +53,9 @@ export const GAME_RESOURCES = {
         toggle: "Last trick",
         label: "Last trick",
       },
+      scoreSummary: {
+        toggle: "Score summary",
+      },
       redeal: {
         banner: "Your hand has no face cards (J, Q, K, A) — you can request a redeal.",
         button: "Request Redeal",
@@ -155,6 +158,9 @@ export const GAME_RESOURCES = {
       lastTrick: {
         toggle: "Última baza",
         label: "Última baza",
+      },
+      scoreSummary: {
+        toggle: "Resumen de puntaje",
       },
       redeal: {
         banner: "Tu mano no tiene figuras (J, Q, K, As) — puedes pedir cambio de juego.",
@@ -259,6 +265,9 @@ export const GAME_RESOURCES = {
         toggle: "Dernière levée",
         label: "Dernière levée",
       },
+      scoreSummary: {
+        toggle: "Résumé des scores",
+      },
       redeal: {
         banner: "Ta main n'a pas de figures (V, D, R, As) — tu peux demander une redistribution.",
         button: "Demander une Redistribution",
@@ -361,6 +370,9 @@ export const GAME_RESOURCES = {
       lastTrick: {
         toggle: "Letzter Stich",
         label: "Letzter Stich",
+      },
+      scoreSummary: {
+        toggle: "Punktezusammenfassung",
       },
       redeal: {
         banner: "Deine Hand hat keine Bildkarten (B, D, K, As) — du kannst eine Neuverteilung verlangen.",

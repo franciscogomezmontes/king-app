@@ -1,5 +1,5 @@
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
-import type { ImageSourcePropType, StyleProp, ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import type { Card, Rank } from "rules-engine";
 import { useTranslation } from "../i18n";
 import { colors, fonts, radii } from "../theme";
@@ -16,137 +16,8 @@ const RANK_LABEL_KEY: Partial<Record<Rank, "jack" | "queen" | "king" | "ace">> =
   14: "ace",
 };
 const COURT_RANKS = new Set<Rank>([11, 12, 13]);
-// Court ranks plus the Ace — every rank this app has real illustrated art for (see
-// FACE_CARD_IMAGES below). Numbers 2-10 keep drawing NUMBER_PIP_ROWS by code, just against an
-// illustrated background (NUMBER_BG_IMAGES) instead of a flat cream fill.
-function hasFaceCardArt(rank: Rank): boolean {
-  return COURT_RANKS.has(rank) || rank === 14;
-}
 
 export type CardFace = "fan" | "table";
-
-export type FaceCardStyle = "basico" | "artdeco" | "retrato" | "grafico" | "folclor";
-
-/** In display order for a settings picker — see SettingsScreen.tsx's own face-card-style section,
- * the same pattern CardBack.tsx's `CARD_BACK_STYLES` already established. "basico" first — the
- * plain code-drawn rendering this app always had, kept as an option for a player who'd rather
- * have less visual noise than any of the 4 illustrated decks (Francisco's explicit request). */
-export const FACE_CARD_STYLES: FaceCardStyle[] = ["basico", "artdeco", "retrato", "grafico", "folclor"];
-
-/** First-run default for a player who's never opened Settings — chosen for legibility at this
- * component's actual on-screen size (`face="table"` is 72x104px), not just how the art reads
- * enlarged: Art Decó Imperial's bold, high-contrast linework holds up best that small among the
- * four styles (see this feature's own readability pass, .claude/skills/king-ui-modernization). */
-export const DEFAULT_FACE_CARD_STYLE: FaceCardStyle = "artdeco";
-
-// Which illustrated-art filename key a card maps to — J/Q/K/A regardless of locale (these are
-// asset filenames, not player-facing text; the actual displayed corner index stays fully
-// locale-aware via RANK_LABEL_KEY/rankLabel above, completely independent of this).
-const FACE_RANK_KEY: Partial<Record<Rank, "J" | "Q" | "K" | "A">> = {
-  11: "J",
-  12: "Q",
-  13: "K",
-  14: "A",
-};
-
-function faceCardKey(card: Card): string {
-  return `${card.suit}${FACE_RANK_KEY[card.rank]}`;
-}
-
-function isIllustrated(style: FaceCardStyle): style is IllustratedFaceCardStyle {
-  return style !== "basico";
-}
-
-// The finished face-card/number-background art lives under apps/mobile/assets (not inside this
-// package), same cross-package-boundary reasoning as CardBack.tsx's own CARD_BACK_IMAGES doc
-// comment: apps/mobile is (today) this package's only consumer, so a plain relative require()
-// reaching across is simpler than duplicating the files into ui-kit's own assets.
-// "basico" has no art of its own (see the render logic below, gated on `showArt`) — these maps
-// only ever get indexed by the 4 illustrated styles, so `Exclude` keeps that structurally true
-// instead of forcing a meaningless "basico" entry just to satisfy a plain `Record<FaceCardStyle,...>`.
-type IllustratedFaceCardStyle = Exclude<FaceCardStyle, "basico">;
-
-const FACE_CARD_IMAGES: Record<IllustratedFaceCardStyle, Record<string, ImageSourcePropType>> = {
-  artdeco: {
-    SK: require("../../../../apps/mobile/assets/facecards/artdeco/SK.jpg"),
-    SQ: require("../../../../apps/mobile/assets/facecards/artdeco/SQ.jpg"),
-    SJ: require("../../../../apps/mobile/assets/facecards/artdeco/SJ.jpg"),
-    SA: require("../../../../apps/mobile/assets/facecards/artdeco/SA.jpg"),
-    HK: require("../../../../apps/mobile/assets/facecards/artdeco/HK.jpg"),
-    HQ: require("../../../../apps/mobile/assets/facecards/artdeco/HQ.jpg"),
-    HJ: require("../../../../apps/mobile/assets/facecards/artdeco/HJ.jpg"),
-    HA: require("../../../../apps/mobile/assets/facecards/artdeco/HA.jpg"),
-    DK: require("../../../../apps/mobile/assets/facecards/artdeco/DK.jpg"),
-    DQ: require("../../../../apps/mobile/assets/facecards/artdeco/DQ.jpg"),
-    DJ: require("../../../../apps/mobile/assets/facecards/artdeco/DJ.jpg"),
-    DA: require("../../../../apps/mobile/assets/facecards/artdeco/DA.jpg"),
-    CK: require("../../../../apps/mobile/assets/facecards/artdeco/CK.jpg"),
-    CQ: require("../../../../apps/mobile/assets/facecards/artdeco/CQ.jpg"),
-    CJ: require("../../../../apps/mobile/assets/facecards/artdeco/CJ.jpg"),
-    CA: require("../../../../apps/mobile/assets/facecards/artdeco/CA.jpg"),
-  },
-  retrato: {
-    SK: require("../../../../apps/mobile/assets/facecards/retrato/SK.jpg"),
-    SQ: require("../../../../apps/mobile/assets/facecards/retrato/SQ.jpg"),
-    SJ: require("../../../../apps/mobile/assets/facecards/retrato/SJ.jpg"),
-    SA: require("../../../../apps/mobile/assets/facecards/retrato/SA.jpg"),
-    HK: require("../../../../apps/mobile/assets/facecards/retrato/HK.jpg"),
-    HQ: require("../../../../apps/mobile/assets/facecards/retrato/HQ.jpg"),
-    HJ: require("../../../../apps/mobile/assets/facecards/retrato/HJ.jpg"),
-    HA: require("../../../../apps/mobile/assets/facecards/retrato/HA.jpg"),
-    DK: require("../../../../apps/mobile/assets/facecards/retrato/DK.jpg"),
-    DQ: require("../../../../apps/mobile/assets/facecards/retrato/DQ.jpg"),
-    DJ: require("../../../../apps/mobile/assets/facecards/retrato/DJ.jpg"),
-    DA: require("../../../../apps/mobile/assets/facecards/retrato/DA.jpg"),
-    CK: require("../../../../apps/mobile/assets/facecards/retrato/CK.jpg"),
-    CQ: require("../../../../apps/mobile/assets/facecards/retrato/CQ.jpg"),
-    CJ: require("../../../../apps/mobile/assets/facecards/retrato/CJ.jpg"),
-    CA: require("../../../../apps/mobile/assets/facecards/retrato/CA.jpg"),
-  },
-  grafico: {
-    SK: require("../../../../apps/mobile/assets/facecards/grafico/SK.jpg"),
-    SQ: require("../../../../apps/mobile/assets/facecards/grafico/SQ.jpg"),
-    SJ: require("../../../../apps/mobile/assets/facecards/grafico/SJ.jpg"),
-    SA: require("../../../../apps/mobile/assets/facecards/grafico/SA.jpg"),
-    HK: require("../../../../apps/mobile/assets/facecards/grafico/HK.jpg"),
-    HQ: require("../../../../apps/mobile/assets/facecards/grafico/HQ.jpg"),
-    HJ: require("../../../../apps/mobile/assets/facecards/grafico/HJ.jpg"),
-    HA: require("../../../../apps/mobile/assets/facecards/grafico/HA.jpg"),
-    DK: require("../../../../apps/mobile/assets/facecards/grafico/DK.jpg"),
-    DQ: require("../../../../apps/mobile/assets/facecards/grafico/DQ.jpg"),
-    DJ: require("../../../../apps/mobile/assets/facecards/grafico/DJ.jpg"),
-    DA: require("../../../../apps/mobile/assets/facecards/grafico/DA.jpg"),
-    CK: require("../../../../apps/mobile/assets/facecards/grafico/CK.jpg"),
-    CQ: require("../../../../apps/mobile/assets/facecards/grafico/CQ.jpg"),
-    CJ: require("../../../../apps/mobile/assets/facecards/grafico/CJ.jpg"),
-    CA: require("../../../../apps/mobile/assets/facecards/grafico/CA.jpg"),
-  },
-  folclor: {
-    SK: require("../../../../apps/mobile/assets/facecards/folclor/SK.jpg"),
-    SQ: require("../../../../apps/mobile/assets/facecards/folclor/SQ.jpg"),
-    SJ: require("../../../../apps/mobile/assets/facecards/folclor/SJ.jpg"),
-    SA: require("../../../../apps/mobile/assets/facecards/folclor/SA.jpg"),
-    HK: require("../../../../apps/mobile/assets/facecards/folclor/HK.jpg"),
-    HQ: require("../../../../apps/mobile/assets/facecards/folclor/HQ.jpg"),
-    HJ: require("../../../../apps/mobile/assets/facecards/folclor/HJ.jpg"),
-    HA: require("../../../../apps/mobile/assets/facecards/folclor/HA.jpg"),
-    DK: require("../../../../apps/mobile/assets/facecards/folclor/DK.jpg"),
-    DQ: require("../../../../apps/mobile/assets/facecards/folclor/DQ.jpg"),
-    DJ: require("../../../../apps/mobile/assets/facecards/folclor/DJ.jpg"),
-    DA: require("../../../../apps/mobile/assets/facecards/folclor/DA.jpg"),
-    CK: require("../../../../apps/mobile/assets/facecards/folclor/CK.jpg"),
-    CQ: require("../../../../apps/mobile/assets/facecards/folclor/CQ.jpg"),
-    CJ: require("../../../../apps/mobile/assets/facecards/folclor/CJ.jpg"),
-    CA: require("../../../../apps/mobile/assets/facecards/folclor/CA.jpg"),
-  },
-};
-
-const NUMBER_BG_IMAGES: Record<IllustratedFaceCardStyle, ImageSourcePropType> = {
-  artdeco: require("../../../../apps/mobile/assets/facecards/artdeco/numberBg.jpg"),
-  retrato: require("../../../../apps/mobile/assets/facecards/retrato/numberBg.jpg"),
-  grafico: require("../../../../apps/mobile/assets/facecards/grafico/numberBg.jpg"),
-  folclor: require("../../../../apps/mobile/assets/facecards/folclor/numberBg.jpg"),
-};
 
 const DIM = {
   fan: { width: 48, height: 78 },
@@ -173,14 +44,6 @@ export interface PlayingCardProps {
   card: Card;
   /** `fan` = readable corner index only (hand). `table` = full pips (trick). */
   face?: CardFace;
-  /** Which illustrated deck to draw King/Queen/Jack/Ace art (and the number cards' shared
-   * background) from — see FACE_CARD_STYLES above. No default: every caller reaches this from
-   * Settings (`useSettings()`), so it's always an explicit, deliberate value, not a silent
-   * fallback a caller forgot to wire up — the same reasoning `CornerIndex`'s locale-aware label
-   * already gets via `useTranslation()`, just threaded as a prop instead since this isn't i18n.
-   * Unused when `face === "fan"` (the hand's own overlapping fan only ever shows the corner
-   * index), but still required there too — see Hand.tsx's own `faceCardStyle` prop for why. */
-  faceCardStyle: FaceCardStyle;
   onPress?: () => void;
   disabled?: boolean;
   highlighted?: boolean;
@@ -216,7 +79,6 @@ export interface PlayingCardProps {
 export function PlayingCard({
   card,
   face = "table",
-  faceCardStyle,
   onPress,
   disabled = false,
   highlighted = false,
@@ -226,28 +88,10 @@ export function PlayingCard({
   const { t } = useTranslation();
   const color = suitColor(card.suit);
   const interactive = onPress !== undefined && !disabled;
-  const isKingHearts = card.rank === 13 && card.suit === "H";
   const isAceHearts = card.rank === 14 && card.suit === "H";
+  const isKingHearts = card.rank === 13 && card.suit === "H";
   const dim = DIM[face];
   const label = rankLabel(card.rank, t);
-  const illustrated = isIllustrated(faceCardStyle);
-  const isFaceCardRank = hasFaceCardArt(card.rank);
-  // `face="table"`'s center content: illustrated styles only ever need to add NumberPips on top
-  // of the background Image above (the image itself already *is* the King/Queen/Jack/Ace face);
-  // "basico" has no background art at all, so it draws everything itself, exactly as this app
-  // did before any illustrated deck existed.
-  let centerContent = null;
-  if (illustrated) {
-    if (!isFaceCardRank) centerContent = <NumberPips rank={card.rank} suit={card.suit} color={color} />;
-  } else if (isFaceCardRank) {
-    centerContent = COURT_RANKS.has(card.rank) ? (
-      <CourtFace label={label} suit={card.suit} color={color} special={isKingHearts} />
-    ) : (
-      <AcePip suit={card.suit} color={color} special={isAceHearts} />
-    );
-  } else {
-    centerContent = <NumberPips rank={card.rank} suit={card.suit} color={color} />;
-  }
 
   const card_ = (
     <View style={[styles.shadowWrap, { width: dim.width, height: dim.height }, style]}>
@@ -261,27 +105,17 @@ export function PlayingCard({
           isKingHearts && face === "table" && styles.cardKingHearts,
         ]}
       >
-        {/* Table only, not the fan hand — tried showing this art behind `face="fan"` too (a
-         * direct request), but a 48px-wide fan card is typically 60-80% covered by its neighbor
-         * (see Hand.tsx's overlap math), so what actually stays visible per card is a narrow,
-         * essentially random vertical sliver of the full illustration — reads as a meaningless
-         * fragment (a stray piece of an ornate frame, a sword, a snake-like flourish), not the
-         * card. Confirmed live: every one of the 4 illustrated styles looked broken this way, not
-         * just one or two cards, so this isn't a fixable per-image crop — the same problem would
-         * recur for any sufficiently detailed art shown at this width/overlap. Reverted; the
-         * fan's own single large corner index (below) is still real information either way. */}
-        {illustrated && face === "table" && (
-          <Image
-            source={isFaceCardRank ? FACE_CARD_IMAGES[faceCardStyle][faceCardKey(card)] : NUMBER_BG_IMAGES[faceCardStyle]}
-            style={[styles.faceArt, { width: dim.width, height: dim.height }]}
-            resizeMode="cover"
-          />
-        )}
         <CornerIndex label={label} suit={card.suit} color={color} large={face === "fan"} />
         {face === "table" && (
           <>
-            {centerContent}
             <CornerIndex label={label} suit={card.suit} color={color} inverted />
+            {COURT_RANKS.has(card.rank) ? (
+              <CourtFace label={label} suit={card.suit} color={color} special={isKingHearts} />
+            ) : card.rank === 14 ? (
+              <AcePip suit={card.suit} color={color} special={isAceHearts} />
+            ) : (
+              <NumberPips rank={card.rank} suit={card.suit} color={color} />
+            )}
           </>
         )}
         {disabled && <View style={styles.shadow} pointerEvents="none" />}
@@ -381,10 +215,6 @@ function NumberPips({ rank, suit, color }: { rank: Rank; suit: Card["suit"]; col
   );
 }
 
-// Only reachable for `faceCardStyle === "basico"` (see `isIllustrated`) — the plain code-drawn
-// rendering this app used before any illustrated deck existed, kept as the deliberately
-// lower-visual-noise option (Francisco's explicit request: "por si alguien no quiere tanto ruido
-// en su juego").
 function AcePip({ suit, color, special }: { suit: Card["suit"]; color: string; special: boolean }) {
   return (
     <View style={styles.aceCenter} pointerEvents="none">
@@ -439,20 +269,11 @@ const styles = StyleSheet.create({
   cardKingHearts: {
     borderColor: colors.gold,
   },
-  // The opaque cream backing (not just the fixed `card` background showing through) is what
-  // keeps this readable regardless of what's directly underneath — an illustrated style's own
-  // background art, whether a number card's decorative frame or a face card's own baked-in
-  // corner index, extends right up to the corner exactly where this needs to sit. A plain patch
-  // here reads as "the index always has a clean spot," the same convention the reference card
-  // Francisco pointed to already uses (ornament confined to the corners the index doesn't touch).
-  // Harmless no-op for "basico" — same solid color as its own already-plain `card` background.
   corner: {
     position: "absolute",
     alignItems: "center",
     width: 20,
     zIndex: 2,
-    backgroundColor: colors.cream,
-    borderRadius: radii.sm,
   },
   cornerLarge: {
     width: 28,
@@ -516,7 +337,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     includeFontPadding: false,
   },
-  // "basico" only (see AcePip/CourtFace above).
   aceCenter: {
     ...StyleSheet.absoluteFillObject,
     alignItems: "center",
@@ -555,18 +375,6 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 3,
     includeFontPadding: false,
-  },
-  // Illustrated face-card art (King/Queen/Jack/Ace) or the number cards' shared background —
-  // either way, a full-bleed layer behind both corner indices, sized to the exact same
-  // width/height as `card` itself (explicit, not `flex`/absoluteFillObject — see CardBack.tsx's
-  // own doc comment on why an Image needs real pixel dimensions here, not shrink-to-fit sizing).
-  // `card`'s own `overflow: "hidden"` clips this to the card's rounded corners; `borderRadius`
-  // here too is the same belt-and-suspenders CardBack.tsx's own image style already uses.
-  faceArt: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    borderRadius: radii.card,
   },
   shadow: {
     position: "absolute",

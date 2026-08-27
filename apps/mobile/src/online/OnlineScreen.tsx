@@ -63,7 +63,6 @@ export function OnlineScreen({ onExit }: OnlineScreenProps) {
       <ActiveOnlineGame
         store={store}
         saveHistoryEnabled={settings.saveHistoryEnabled}
-        showScoreSummary={settings.showScoreSummary}
         onExit={onExit}
       />
     );
@@ -297,12 +296,10 @@ function turnMessage(
 function ActiveOnlineGame({
   store,
   saveHistoryEnabled,
-  showScoreSummary,
   onExit,
 }: {
   store: OnlineGameStoreHook;
   saveHistoryEnabled: boolean;
-  showScoreSummary: boolean;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -317,6 +314,9 @@ function ActiveOnlineGame({
   const requestRedeal = store((s) => s.requestRedeal);
   const leaveGame = store((s) => s.leaveGame);
   const [showLastTrick, setShowLastTrick] = useState(true);
+  // Also local, not persisted — same rationale as showLastTrick above, and lets a player flip it
+  // on/off mid-game (Francisco's request) instead of only from Settings before the game starts.
+  const [showScoreSummary, setShowScoreSummary] = useState(false);
 
   if (envelope === null) {
     return <SafeAreaView style={styles.container} />;
@@ -353,12 +353,18 @@ function ActiveOnlineGame({
       <View style={[styles.content, { maxWidth: layout.maxContentWidth }]}>
         <View style={styles.header}>
           <BackButton onPress={exit} label={t("online:leaveRoom")} />
-          <View style={styles.lastTrickToggle}>
-            <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
-            <Switch
-              value={showLastTrick}
-              onValueChange={setShowLastTrick}
-            />
+          <View style={styles.toggleColumn}>
+            <View style={styles.lastTrickToggle}>
+              <Text style={styles.headerToggle}>{t("game:lastTrick.toggle")}</Text>
+              <Switch
+                value={showLastTrick}
+                onValueChange={setShowLastTrick}
+              />
+            </View>
+            <View style={styles.lastTrickToggle}>
+              <Text style={styles.headerToggle}>{t("game:scoreSummary.toggle")}</Text>
+              <Switch value={showScoreSummary} onValueChange={setShowScoreSummary} />
+            </View>
           </View>
         </View>
 
@@ -634,6 +640,10 @@ const styles = StyleSheet.create({
   lastTrickToggle: {
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.xs,
+  },
+  toggleColumn: {
+    alignItems: "flex-end",
     gap: spacing.xs,
   },
   headerToggle: {

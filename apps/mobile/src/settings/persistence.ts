@@ -14,16 +14,6 @@ const STORAGE_KEY = "king:settings:v1";
 // stays fine either way — type-only imports are erased before anything runs. Keep this list in
 // sync with CardBack.tsx's `CARD_BACK_STYLES` if a variant is ever added, renamed, or removed.
 const KNOWN_CARD_BACK_STYLES: ReadonlyArray<Settings["cardBackStyle"]> = ["royal", "medallion", "laurel", "sunburst"];
-// Mirrors ui-kit's own PlayingCard.tsx `FACE_CARD_STYLES` — same deliberately-local-copy reasoning
-// as `KNOWN_CARD_BACK_STYLES` above (a runtime `import` from "ui-kit" breaks Vitest's SSR
-// transform). Keep in sync if a face-card style is ever added, renamed, or removed.
-const KNOWN_FACE_CARD_STYLES: ReadonlyArray<Settings["faceCardStyle"]> = [
-  "basico",
-  "artdeco",
-  "retrato",
-  "grafico",
-  "folclor",
-];
 
 /** Loads the player's saved settings, if any. Never throws into the caller — a missing key,
  * malformed JSON, or a `version` from an older/incompatible shape all just resolve to the
@@ -43,13 +33,6 @@ export async function loadSettings(storage: KeyValueStorage = AsyncStorage): Pro
       parsed.cardBackStyle !== undefined && KNOWN_CARD_BACK_STYLES.includes(parsed.cardBackStyle)
         ? parsed.cardBackStyle
         : DEFAULT_SETTINGS.cardBackStyle;
-    // Same reasoning as `cardBackStyle` above: a saved value from before this feature existed, or
-    // a since-renamed/removed style, falls back to the current default instead of handing
-    // PlayingCard.tsx's `FACE_CARD_IMAGES` a key it has no entry for.
-    const faceCardStyle: Settings["faceCardStyle"] =
-      parsed.faceCardStyle !== undefined && KNOWN_FACE_CARD_STYLES.includes(parsed.faceCardStyle)
-        ? parsed.faceCardStyle
-        : DEFAULT_SETTINGS.faceCardStyle;
     // `gameRules` is merged field-by-field (not replaced wholesale) so a persisted blob saved
     // before some future rules-engine toggle existed still gets that toggle's default instead of
     // `undefined` — the whole reason this settings menu is meant to grow over time.
@@ -57,7 +40,6 @@ export async function loadSettings(storage: KeyValueStorage = AsyncStorage): Pro
       ...DEFAULT_SETTINGS,
       ...parsed,
       cardBackStyle,
-      faceCardStyle,
       gameRules: { ...DEFAULT_SETTINGS.gameRules, ...parsed.gameRules },
     };
   } catch {
