@@ -261,12 +261,16 @@ export function PlayingCard({
           isKingHearts && face === "table" && styles.cardKingHearts,
         ]}
       >
-        {/* Background art now renders on `face="fan"` too (Francisco's explicit request — the
-         * player's own hand used to stay plain cream even with an illustrated style active),
-         * not just `face="table"`; only the *content* below (full pips / court face / a second
-         * corner index) stays table-only, same as before — a 48px-wide, 60%+-overlapped fan card
-         * has no room for that level of detail regardless of style. */}
-        {illustrated && (
+        {/* Table only, not the fan hand — tried showing this art behind `face="fan"` too (a
+         * direct request), but a 48px-wide fan card is typically 60-80% covered by its neighbor
+         * (see Hand.tsx's overlap math), so what actually stays visible per card is a narrow,
+         * essentially random vertical sliver of the full illustration — reads as a meaningless
+         * fragment (a stray piece of an ornate frame, a sword, a snake-like flourish), not the
+         * card. Confirmed live: every one of the 4 illustrated styles looked broken this way, not
+         * just one or two cards, so this isn't a fixable per-image crop — the same problem would
+         * recur for any sufficiently detailed art shown at this width/overlap. Reverted; the
+         * fan's own single large corner index (below) is still real information either way. */}
+        {illustrated && face === "table" && (
           <Image
             source={isFaceCardRank ? FACE_CARD_IMAGES[faceCardStyle][faceCardKey(card)] : NUMBER_BG_IMAGES[faceCardStyle]}
             style={[styles.faceArt, { width: dim.width, height: dim.height }]}
