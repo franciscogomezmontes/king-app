@@ -36,6 +36,10 @@ export const SCOREKEEPER_RESOURCES = {
         noLastTwo: "How many of the last 2 tricks did each Player win?",
         positive: "How many Tricks did each Player win?",
       },
+      count: {
+        decrease: "Decrease {{name}}'s count",
+        increase: "Increase {{name}}'s count",
+      },
       validation: {
         ok: "OK",
         mismatch: "Doesn't add up — should total {{expected}}",
@@ -79,6 +83,10 @@ export const SCOREKEEPER_RESOURCES = {
         noKingOfHearts: "¿Quién se llevó el Rey de Corazones?",
         noLastTwo: "¿Cuántas de las últimas 2 bazas ganó cada Jugador?",
         positive: "¿Cuántas Bazas ganó cada Jugador?",
+      },
+      count: {
+        decrease: "Disminuir cantidad de {{name}}",
+        increase: "Aumentar cantidad de {{name}}",
       },
       validation: {
         ok: "OK",
@@ -124,6 +132,10 @@ export const SCOREKEEPER_RESOURCES = {
         noLastTwo: "Combien des 2 dernières levées chaque Joueur a-t-il remportées ?",
         positive: "Combien de Levées chaque Joueur a-t-il remportées ?",
       },
+      count: {
+        decrease: "Diminuer le nombre de {{name}}",
+        increase: "Augmenter le nombre de {{name}}",
+      },
       validation: {
         ok: "OK",
         mismatch: "Ça ne tombe pas juste — le total devrait être {{expected}}",
@@ -167,6 +179,10 @@ export const SCOREKEEPER_RESOURCES = {
         noKingOfHearts: "Wer hat den Herzkönig bekommen?",
         noLastTwo: "Wie viele der letzten 2 Stiche hat jeder Spieler gewonnen?",
         positive: "Wie viele Stiche hat jeder Spieler gewonnen?",
+      },
+      count: {
+        decrease: "Anzahl von {{name}} verringern",
+        increase: "Anzahl von {{name}} erhöhen",
       },
       validation: {
         ok: "OK",

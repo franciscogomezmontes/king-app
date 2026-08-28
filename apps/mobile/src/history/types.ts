@@ -1,5 +1,6 @@
 import type { PlayerIndex } from "rules-engine";
 import type { ScoreboardEntry } from "ui-kit";
+import type { Difficulty } from "../game/store";
 
 export type GameMode = "scorekeeper" | "solo" | "online";
 
@@ -19,4 +20,6 @@ export interface CompletedGame {
   playerNames: Record<PlayerIndex, string>;
   finalScores: Record<PlayerIndex, number>;
   handHistory: ScoreboardEntry[];
+  /** Only ever set for `mode: "solo"` — Scorekeeper and Online have no AI difficulty concept. */
+  difficulty?: Difficulty;
 }

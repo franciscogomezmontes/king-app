@@ -32,6 +32,7 @@ export const GAME_RESOURCES = {
         declared: "{{name}} named trump directly",
         won: "{{name}} won the auction ({{tricks}} tricks)",
         trump: "Trump",
+        detailsToggle: "Show auction details",
       },
       auctionLog: {
         title: "Auction",
@@ -138,6 +139,7 @@ export const GAME_RESOURCES = {
         declared: "{{name}} nombró el triunfo directamente",
         won: "{{name}} ganó la subasta ({{tricks}} bazas)",
         trump: "Triunfo",
+        detailsToggle: "Ver detalle de la subasta",
       },
       auctionLog: {
         title: "Subasta",
@@ -244,6 +246,7 @@ export const GAME_RESOURCES = {
         declared: "{{name}} a nommé l'atout directement",
         won: "{{name}} a remporté l'enchère ({{tricks}} levées)",
         trump: "Atout",
+        detailsToggle: "Afficher le détail de l'enchère",
       },
       auctionLog: {
         title: "Enchère",
@@ -350,6 +353,7 @@ export const GAME_RESOURCES = {
         declared: "{{name}} hat direkt Trumpf angesagt",
         won: "{{name}} hat die Auktion gewonnen ({{tricks}} Stiche)",
         trump: "Trumpf",
+        detailsToggle: "Auktionsdetails anzeigen",
       },
       auctionLog: {
         title: "Auktion",

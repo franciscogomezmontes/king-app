@@ -12,7 +12,6 @@ import {
   illegalPlayReason,
   legalCardsFor,
   PlayerIndex,
-  SUITS,
 } from "rules-engine";
 import { saveCompletedGame } from "../history/persistence";
 import { useSettings } from "../settings/useSettings";
@@ -31,12 +30,14 @@ import {
   Switch,
   Table,
   Toast,
+  TRUMP_SUIT_DISPLAY_ORDER,
   WinCelebration,
   colors,
   fonts,
   layout,
   radii,
   spacing,
+  suitColor,
   typography,
   useTranslation,
 } from "ui-kit";
@@ -48,7 +49,7 @@ import { Difficulty, GameStoreHook, TrumpChoice, createGameStore, resumeGameStor
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 const HUMAN_SEAT: PlayerIndex = 0;
 // See WinCelebration/GameOverView — same require-a-local-asset pattern as botRoster.ts's avatars.
-const KING_CELEBRATION_IMAGE = require("../../assets/celebration/kingOfHearts.jpg");
+const KING_CELEBRATION_IMAGE = require("../../assets/celebration/kingOfHearts.png");
 
 export interface GameScreenProps {
   onExit: () => void;
@@ -306,9 +307,11 @@ function GameTable({
   const dealerDecide = store((s) => s.dealerDecide);
   const continueToNextHand = store((s) => s.continueToNextHand);
   const requestRedeal = store((s) => s.requestRedeal);
-  // Local, not persisted — a per-session display preference, not game state. Defaults on: the
-  // point is to make it discoverable, not to add a hunt-for-the-setting step.
-  const [showLastTrick, setShowLastTrick] = useState(true);
+  // Local, not persisted — a per-session display preference, not game state. Defaults on so it's
+  // discoverable rather than a hunt-for-the-setting step — except at Experto, where the whole
+  // point of that difficulty is playing without extra reference aids (see explainIllegal below),
+  // so it starts off there instead (Francisco's request; still freely toggleable either way).
+  const [showLastTrick, setShowLastTrick] = useState(difficulty !== "expert");
   // Also local, not persisted — same rationale as showLastTrick above, and lets the player flip it
   // on/off mid-game (Francisco's request) instead of only from Settings before the game starts.
   // Off by default: most players don't need it visible every hand.
@@ -316,6 +319,14 @@ function GameTable({
   // Full results-so-far table, on demand — without it, a player can only see the running score as
   // bare numbers in ScorePanel and has to wait for a hand to finish to see the hand-by-hand table.
   const [showScoreboard, setShowScoreboard] = useState(false);
+  // Whether this positive hand's AuctionSummary is expanded into the full AuctionLog transcript —
+  // that transcript otherwise only shows live while the auction itself is still in progress, and
+  // then disappears the moment play starts (Francisco's request: keep it reachable afterward too,
+  // via tapping the summary itself). Reset below on every new hand so it never carries over stale.
+  const [showAuctionDetails, setShowAuctionDetails] = useState(false);
+  useEffect(() => {
+    setShowAuctionDetails(false);
+  }, [game.handIndex]);
   // Expert difficulty only (see Hand's `explainIllegal`) — the message from the most recent
   // illegal tap, auto-dismissed a few seconds later so it never lingers past the moment it's
   // useful. `null` means nothing to show. The dismiss timer lives here (declared unconditionally,
@@ -353,7 +364,13 @@ function GameTable({
 
   if (game.phase === "game-complete") {
     return (
-      <GameOverView game={game} seatLabels={seatLabels} saveHistoryEnabled={saveHistoryEnabled} onExit={onExit} />
+      <GameOverView
+        game={game}
+        seatLabels={seatLabels}
+        saveHistoryEnabled={saveHistoryEnabled}
+        difficulty={difficulty}
+        onExit={onExit}
+      />
     );
   }
 
@@ -479,13 +496,21 @@ function GameTable({
           )}
         </View>
         {game.handType === "positive" && game.positiveSetup !== null && game.phase === "playing" && (
-          <AuctionSummary positiveSetup={game.positiveSetup} seatLabels={seatLabels} />
+          <AuctionSummary
+            positiveSetup={game.positiveSetup}
+            seatLabels={seatLabels}
+            onPress={game.positiveSetup.auctionOpened ? () => setShowAuctionDetails((v) => !v) : undefined}
+            expanded={showAuctionDetails}
+          />
         )}
         {/* Visible for as long as an auction is underway (including every bot's own turn to bid or
          * pass, which previously happened with nothing shown at all) — from the moment the dealer
          * opens it through their final accept/decline call. Once trump is actually declared and
-         * play starts, AuctionSummary above takes over as the persistent recap. */}
-        {game.handType === "positive" && game.positiveSetup !== null && game.positiveSetup.auctionOpened && game.phase !== "playing" && (
+         * play starts, AuctionSummary above takes over as the persistent recap, but stays tappable
+         * to re-expand this same transcript (showAuctionDetails) instead of losing it for the rest
+         * of the hand. */}
+        {game.handType === "positive" && game.positiveSetup !== null && game.positiveSetup.auctionOpened &&
+          (game.phase !== "playing" || showAuctionDetails) && (
           <AuctionLog
             entries={auctionLog}
             seatLabels={seatLabels}
@@ -590,13 +615,13 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
       <Panel style={styles.overlayPanel}>
         <Text style={styles.overlayPrompt}>{t("game:trump.prompt")}</Text>
         <View style={styles.row}>
-          {SUITS.map((suit) => (
+          {TRUMP_SUIT_DISPLAY_ORDER.map((suit) => (
             <Pressable
               key={suit}
               style={styles.trumpButton}
               onPress={() => declareTrump({ trump: suit, direction, backwards })}
             >
-              <Text style={styles.trumpButtonLabel}>{SUIT_SYMBOLS[suit]}</Text>
+              <Text style={[styles.trumpButtonLabel, { color: suitColor(suit) }]}>{SUIT_SYMBOLS[suit]}</Text>
             </Pressable>
           ))}
           <Pressable
@@ -625,7 +650,7 @@ function DecisionPanel({ game, decision, declareTrump, openAuction, submitBid, p
           </View>
         )}
         {decision.canOpenAuction && (
-          <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.inlineButton} />
+          <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.openAuctionButton} />
         )}
       </Panel>
     );
@@ -702,11 +727,13 @@ function GameOverView({
   game,
   seatLabels,
   saveHistoryEnabled,
+  difficulty,
   onExit,
 }: {
   game: GameState;
   seatLabels: Record<PlayerIndex, string>;
   saveHistoryEnabled: boolean;
+  difficulty: Difficulty;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -718,9 +745,9 @@ function GameOverView({
       : t("game:scoreboard.tie", { names: winners.map((seat) => seatLabels[seat]).join(", ") });
   // Only the human winning outright (not part of a tie) gets the celebration — see WinCelebration.
   const humanWinsAlone = winners.length === 1 && winners[0] === HUMAN_SEAT;
-  // Local, not persisted: flips once the celebration has played itself out (auto-hold timeout or a
-  // tap), so it never replays on a re-render of this same finished game (e.g. toggling the score
-  // summary elsewhere in the app doesn't remount this screen, but state changes here still would).
+  // Local, not persisted: flips once the player has tapped the celebration away, so it never
+  // replays on a re-render of this same finished game (e.g. toggling the score summary elsewhere
+  // in the app doesn't remount this screen, but state changes here still would).
   const [celebrationDismissed, setCelebrationDismissed] = useState(false);
 
   // Fires once when this view mounts (i.e. once per finished game) — folds the just-finished
@@ -740,6 +767,7 @@ function GameOverView({
         scores: entry.scores,
         positiveSetup: entry.positiveSetup !== null ? { direction: entry.positiveSetup.direction } : null,
       })),
+      difficulty,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -950,6 +978,14 @@ const styles = StyleSheet.create({
   },
   inlineButton: {
     minWidth: 0,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 14,
+  },
+  // Extra breathing room above the suit-choice row (and the direction/backwards toggles, when
+  // shown) — without it this button read as glued directly onto the row above it.
+  openAuctionButton: {
+    minWidth: 0,
+    marginTop: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: 14,
   },

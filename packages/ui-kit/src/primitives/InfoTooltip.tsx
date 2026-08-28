@@ -81,7 +81,16 @@ export function InfoTooltip({ content, label, open, onToggle }: InfoTooltipProps
 
   return (
     <View style={styles.wrap}>
-      <Pressable ref={badgeRef} onPress={handlePress} accessibilityLabel={label} style={styles.badge}>
+      <Pressable
+        ref={badgeRef}
+        onPress={handlePress}
+        accessibilityLabel={label}
+        style={styles.badge}
+        // The visual badge stays small (22x22, see `styles.badge`) — this only grows the actual
+        // tappable area around it, since Francisco found it too fiddly to hit precisely on a real
+        // phone. hitSlop doesn't affect layout/other elements' spacing, only touch targeting.
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
         <Text style={styles.glyph}>i</Text>
       </Pressable>
       {open && (

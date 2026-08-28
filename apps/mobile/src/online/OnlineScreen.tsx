@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { GameRules, GameState, PlayerIndex } from "rules-engine";
-import { canRequestRedeal, highestBid, legalCardsFor, SUITS } from "rules-engine";
+import { canRequestRedeal, highestBid, legalCardsFor } from "rules-engine";
 import {
   AuctionSummary,
   BackButton,
@@ -17,11 +17,13 @@ import {
   Surface,
   Switch,
   Table,
+  TRUMP_SUIT_DISPLAY_ORDER,
   colors,
   fonts,
   layout,
   radii,
   spacing,
+  suitColor,
   typography,
   useTranslation,
 } from "ui-kit";
@@ -449,9 +451,9 @@ function OnlineDecisionPanel({
       <Panel style={styles.panel}>
         <Text style={styles.prompt}>{t("game:trump.prompt")}</Text>
         <View style={styles.row}>
-          {SUITS.map((suit) => (
+          {TRUMP_SUIT_DISPLAY_ORDER.map((suit) => (
             <Pressable key={suit} style={styles.trumpButton} onPress={() => declareTrump({ trump: suit, direction, backwards })}>
-              <Text style={styles.trumpButtonLabel}>{SUIT_SYMBOLS[suit]}</Text>
+              <Text style={[styles.trumpButtonLabel, { color: suitColor(suit) }]}>{SUIT_SYMBOLS[suit]}</Text>
             </Pressable>
           ))}
           <Pressable style={styles.trumpButton} onPress={() => declareTrump({ trump: null, direction, backwards })}>
@@ -477,7 +479,7 @@ function OnlineDecisionPanel({
           </View>
         )}
         {decision.canOpenAuction && (
-          <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.inlineButton} />
+          <Button label={t("game:trump.openAuction")} onPress={openAuction} variant="secondary" style={styles.openAuctionButton} />
         )}
       </Panel>
     );
@@ -810,6 +812,12 @@ const styles = StyleSheet.create({
   },
   inlineButton: {
     minWidth: 0,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 14,
+  },
+  openAuctionButton: {
+    minWidth: 0,
+    marginTop: spacing.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: 14,
   },

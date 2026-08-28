@@ -72,6 +72,9 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
           </View>
           <Text style={styles.title}>{t(`history:modeLabel.${selected.mode}`)}</Text>
           <Text style={styles.date}>{selected.date}</Text>
+          {selected.difficulty !== undefined && (
+            <Text style={styles.difficulty}>{t(`game:difficulty.${selected.difficulty}`)}</Text>
+          )}
           <Text style={styles.winnerText}>{winnerLine(t, selected)}</Text>
           <Scoreboard handHistory={selected.handHistory} seatLabels={selected.playerNames} />
         </ScrollView>
@@ -116,7 +119,12 @@ export function HistoryScreen({ onExit }: HistoryScreenProps) {
               <Surface key={game.id} style={[styles.gameCard, styles.gameCardRow]}>
                 <Pressable style={styles.gameCardMain} onPress={() => setSelected(game)}>
                   <View style={styles.gameCardHeader}>
-                    <Text style={styles.gameCardMode}>{t(`history:modeLabel.${game.mode}`)}</Text>
+                    <View style={styles.gameCardModeRow}>
+                      <Text style={styles.gameCardMode}>{t(`history:modeLabel.${game.mode}`)}</Text>
+                      {game.difficulty !== undefined && (
+                        <Text style={styles.gameCardDifficulty}>· {t(`game:difficulty.${game.difficulty}`)}</Text>
+                      )}
+                    </View>
                     <Text style={styles.gameCardDate}>{game.date}</Text>
                   </View>
                   <Text style={styles.gameCardWinner}>{winnerLine(t, game)}</Text>
@@ -192,6 +200,12 @@ const styles = StyleSheet.create({
     marginTop: -spacing.sm,
     marginBottom: spacing.sm,
   },
+  difficulty: {
+    color: colors.gold,
+    fontFamily: fonts.bodySemi,
+    fontSize: 13,
+    marginBottom: spacing.sm,
+  },
   empty: {
     ...typography.body,
     textAlign: "center",
@@ -229,10 +243,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: spacing.xs,
   },
+  gameCardModeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   gameCardMode: {
     fontFamily: fonts.bodySemi,
     fontSize: 15,
     color: colors.cream,
+  },
+  gameCardDifficulty: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.secondaryText,
   },
   gameCardDate: {
     color: colors.secondaryText,

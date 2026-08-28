@@ -14,27 +14,26 @@ export interface WinCelebrationProps {
 const APPEAR_DELAY_MS = 200;
 const KING_ENTER_MS = 450;
 const BUBBLE_ENTER_MS = 200;
-// Measured from the moment the bubble has fully appeared, not from mount — "se queda 2-3s" per
-// Francisco's spec, landing in the middle of that window.
-const HOLD_MS = 2400;
 const EXIT_MS = 280;
 
-const KING_WIDTH = 220;
-// The source art (apps/mobile/assets/celebration/kingOfHearts.jpg) is a fixed 1408x774 waving-King
+const KING_WIDTH = 320;
+// The source art (apps/mobile/assets/celebration/kingOfHearts.png, background removed via a
+// flood-fill cutout of the original photographed illustration) is a fixed 1408x768 waving-King
 // illustration — this preserves its real proportions instead of stretching/cropping it.
-const KING_HEIGHT = KING_WIDTH * (774 / 1408);
+const KING_HEIGHT = KING_WIDTH * (768 / 1408);
 
 /**
  * A full-screen celebratory overlay for the one moment that used to just flash straight from the
  * table to a plain "Game Over" scoreboard: the human winning a solo game outright (no tie). The
- * King of Hearts slides in, "speaks" a localized congratulations in a speech bubble, holds for a
- * couple of seconds, then fades back out on its own — or instantly, on a tap anywhere on screen.
+ * King of Hearts slides in and "speaks" a localized congratulations in a speech bubble, then stays
+ * up indefinitely — dismissed only by a tap anywhere on screen, never on its own timer (Francisco's
+ * request: it's meant to be enjoyed for as long as the player wants).
  *
- * Purely presentational and self-contained: it owns its whole enter/hold/exit sequence and only
- * calls back out via `onDismiss` once the exit animation has actually finished playing, so the
- * caller never has to coordinate timers of its own or guess when it's safe to stop rendering this
- * — see GameOverView's usage in apps/mobile/src/game/GameScreen.tsx, which decides *whether* to
- * show this (the winner-computation logic) and hands this component only `visible`/`message`.
+ * Purely presentational and self-contained: it owns its whole enter/exit sequence and only calls
+ * back out via `onDismiss` once the exit animation has actually finished playing, so the caller
+ * never has to coordinate timers of its own or guess when it's safe to stop rendering this — see
+ * GameOverView's usage in apps/mobile/src/game/GameScreen.tsx, which decides *whether* to show
+ * this (the winner-computation logic) and hands this component only `visible`/`message`.
  */
 export function WinCelebration({ visible, message, imageSource, onDismiss }: WinCelebrationProps) {
   const overlayOpacity = useSharedValue(0);
@@ -42,10 +41,9 @@ export function WinCelebration({ visible, message, imageSource, onDismiss }: Win
   const kingTranslateY = useSharedValue(50);
   const bubbleOpacity = useSharedValue(0);
   const bubbleScale = useSharedValue(0.6);
-  // Guards against firing onDismiss twice — a tap landing right as the auto-hold timer also fires
-  // would otherwise both reach the end of their own exit animation and each call it once.
+  // Guards against firing onDismiss twice — e.g. two taps landing before the exit animation this
+  // component's own Pressable is still covered by has actually finished unmounting it.
   const dismissedRef = useRef(false);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function fireDismiss() {
     if (dismissedRef.current) return;
@@ -54,10 +52,6 @@ export function WinCelebration({ visible, message, imageSource, onDismiss }: Win
   }
 
   function triggerExit() {
-    if (holdTimer.current !== null) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
     overlayOpacity.value = withTiming(0, { duration: EXIT_MS });
     bubbleOpacity.value = withTiming(0, { duration: EXIT_MS });
     kingTranslateY.value = withTiming(30, { duration: EXIT_MS });
@@ -83,13 +77,10 @@ export function WinCelebration({ visible, message, imageSource, onDismiss }: Win
     kingTranslateY.value = withDelay(APPEAR_DELAY_MS, withSpring(0, { damping: 14, stiffness: 140 }));
     bubbleOpacity.value = withDelay(APPEAR_DELAY_MS + KING_ENTER_MS, withTiming(1, { duration: BUBBLE_ENTER_MS }));
     bubbleScale.value = withDelay(APPEAR_DELAY_MS + KING_ENTER_MS, withTiming(1, { duration: BUBBLE_ENTER_MS }));
-
-    holdTimer.current = setTimeout(triggerExit, APPEAR_DELAY_MS + KING_ENTER_MS + BUBBLE_ENTER_MS + HOLD_MS);
-    return () => {
-      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
-    };
-    // Only re-runs when `visible` itself flips — the shared values/timer refs are stable across
-    // renders and deliberately not re-triggered by anything else.
+    // No auto-hold/auto-exit timer (Francisco's request) — this now stays on screen until the
+    // player actually taps to dismiss it, however long that takes.
+    // Only re-runs when `visible` itself flips — the shared values are stable across renders and
+    // deliberately not re-triggered by anything else.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 

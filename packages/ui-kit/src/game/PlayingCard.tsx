@@ -5,6 +5,10 @@ import { useTranslation } from "../i18n";
 import { colors, fonts, radii } from "../theme";
 
 export const SUIT_SYMBOLS: Record<Card["suit"], string> = { S: "♠", H: "♥", D: "♦", C: "♣" };
+// Display order for any UI that lets a player pick a suit (e.g. naming trump) — deliberately not
+// rules-engine's own `SUITS` array (whose order is an internal implementation detail, unrelated to
+// how suits should read on screen). Diamonds, Spades, Hearts, Clubs, per Francisco's request.
+export const TRUMP_SUIT_DISPLAY_ORDER: Card["suit"][] = ["D", "S", "H", "C"];
 const RED_SUITS = new Set<Card["suit"]>(["H", "D"]);
 // Which "rules:rankLabels" key each court rank maps to — the actual letter is locale-dependent
 // (see rulesResources.ts's own doc comment: French/German use their real-table abbreviations,
@@ -36,7 +40,7 @@ function rankLabel(rank: Rank, t: (key: string) => string): string {
   return key !== undefined ? t(`rules:rankLabels.${key}`) : String(rank);
 }
 
-function suitColor(suit: Card["suit"]): string {
+export function suitColor(suit: Card["suit"]): string {
   return RED_SUITS.has(suit) ? colors.heart : colors.ink;
 }
 

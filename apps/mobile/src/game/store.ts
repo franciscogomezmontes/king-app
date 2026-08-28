@@ -93,8 +93,21 @@ function makeBot(difficulty: Difficulty, random: RandomSource): Bot {
  * bot visibly "think" for hundreds of ms — the jarring inconsistency that reads as broken
  * animations, not a difficulty-appropriate pace. Padding on top of Expert's 900ms budget, which
  * already exceeds any reasonable floor, is correctly a no-op.
+ *
+ * Also yields one real macrotask (`delay(0)`) before running `compute`, whenever `minMs > 0` —
+ * without it, a run of several consecutive Hard/Expert decisions (each exceeding `minMs`, so the
+ * top-up below never fires either) could execute back-to-back with the JS thread never actually
+ * idle long enough for React Native to commit and paint a frame in between. Confirmed as the root
+ * cause of two reported bugs, both far more visible on Expo Go's slower JS runtime than a release
+ * build's optimized Hermes bytecode (which usually finishes fast enough to hit the `minMs` top-up's
+ * own real delay instead): a hand's first few cards sometimes never rendering right after a
+ * multi-bot auction-open flurry, and a transient layout glitch (content briefly drawing under the
+ * status bar) during a bot's own open-auction search. Skipped when `minMs` is explicitly 0 (tests
+ * driving the game fast, see TRICK_REVEAL_MS's own doc comment) — a real full game there runs
+ * hundreds of these back to back, and even a nominal `setTimeout(0)` adds up across that many.
  */
 async function pacedDecision<T>(minMs: number, compute: () => T): Promise<T> {
+  if (minMs > 0) await delay(0);
   const start = Date.now();
   const result = compute();
   const elapsed = Date.now() - start;
