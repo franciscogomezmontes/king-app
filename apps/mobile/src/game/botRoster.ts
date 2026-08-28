@@ -11,10 +11,16 @@ export interface BotRosterEntry {
 }
 
 /**
- * The 10 bot personas Solo vs Computer draws 3 opponents from (see `pickBotRosterIndices`) — art
- * generated once, reused across every game rather than per-game placeholder silhouettes. Which 3
+ * The 12 personas Solo vs Computer draws 3 opponents from (see `pickBotRosterIndices`) — art
+ * generated once, reused across every game rather than per-game placeholder silhouettes. Which
  * archetypes/table personalities they represent is flavor text that lives in the UX plan doc, not
  * here; this module only needs to know each entry's name, image, and accent color.
+ *
+ * "Francisco" and "Lorena" (added 2026-08-28) are Francisco's own custom avatars, generated from
+ * his and his wife's real photos with their explicit consent. They live in this same array rather
+ * than a separate personal-avatars list (Francisco's own call — see the UX plan doc) — meaning a
+ * Solo vs Computer game can occasionally draw either of them as a bot opponent, same as any other
+ * roster entry.
  */
 export const BOT_ROSTER: BotRosterEntry[] = [
   { name: "Marta", color: "#2f6f52", image: require("../../assets/avatars/marta.jpg") },
@@ -27,6 +33,8 @@ export const BOT_ROSTER: BotRosterEntry[] = [
   { name: "Iván", color: "#1f5f5b", image: require("../../assets/avatars/ivan.jpg") },
   { name: "Julián", color: "#a15239", image: require("../../assets/avatars/julian.jpg") },
   { name: "Santiago", color: "#c9862f", image: require("../../assets/avatars/santiago.jpg") },
+  { name: "Francisco", color: "#8a4a2f", image: require("../../assets/avatars/francisco.jpg") },
+  { name: "Lorena", color: "#6b8e5a", image: require("../../assets/avatars/lorena.jpg") },
 ];
 
 /**
