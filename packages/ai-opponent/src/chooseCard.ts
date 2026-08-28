@@ -1,118 +1,49 @@
-import {
-  Card,
-  currentRuleSet,
-  currentTrumpSuit,
-  GameState,
-  legalCardsFor,
-  NegativeHandType,
-  PlayerIndex,
-  rankValue,
-  resolveTrick,
-  RuleSet,
-  TrumpSuit,
-} from "rules-engine";
+import { Card, GameState, legalCardsFor, PlayerIndex, RandomSource } from "rules-engine";
+import { chooseCardHeuristic } from "./heuristic";
+import { EXPERT_BUDGET_MS, HARD_BUDGET_MS, ismctsChooseCard } from "./ismcts";
 
-/** Would playing `card` right now win the trick? Exact when `player` is last to act; a sound
- * heuristic signal otherwise. Reuses `resolveTrick` itself rather than reimplementing rank/trump
- * comparisons — the bot must never hand-roll legality or trick resolution. */
-function wouldCurrentlyWin(
+/**
+ * "easy" is Tier 1's heuristic (`chooseCardHeuristic`, tracking off) with some randomness mixed in
+ * (per .claude/skills/king-ai-opponent: "Easy can even just be the Tier 1 heuristic bot with
+ * intentional randomness mixed in"). "normal" is the same heuristic with card-tracking-aware
+ * leading turned on (see heuristic.ts's `choosePositiveLead`). "hard" and "expert" are Tier 2:
+ * Information Set Monte Carlo Tree Search (see ismcts.ts) with a modest and a larger search
+ * budget respectively — see `HARD_BUDGET_MS`/`EXPERT_BUDGET_MS`.
+ */
+export type Difficulty = "easy" | "normal" | "hard" | "expert";
+
+// How often "easy" ignores its own heuristic and just plays a uniformly random legal card instead
+// — enough to be a noticeably weaker, less consistent opponent without playing outright illegally
+// or nonsensically most of the time.
+const EASY_RANDOMNESS = 0.2;
+
+/**
+ * Picks a card to play for `player`, given the full game state. Dispatches to Tier 1
+ * (`chooseCardHeuristic`, heuristic.ts) for "easy"/"normal", or Tier 2 (`ismctsChooseCard`,
+ * ismcts.ts) for "hard"/"expert" — see the `Difficulty` doc above. Always legal regardless of
+ * difficulty: Tier 1 only ever chooses from `legalCardsFor`, and Tier 2 is built the same way (its
+ * own tree/rollout moves are drawn from `legalCardsFor` at every step, including its rollout
+ * policy, which is Tier 1 itself).
+ */
+export function chooseCard(
   state: GameState,
   player: PlayerIndex,
-  card: Card,
-  trumpSuit: TrumpSuit,
-  ruleSet: RuleSet,
-): boolean {
-  const hypothetical = [...state.currentTrick, { player, card }];
-  return resolveTrick(hypothetical, trumpSuit, ruleSet) === player;
-}
-
-function lowestCard(cards: Card[], backwards: boolean): Card {
-  return cards.reduce((best, c) =>
-    rankValue(c.rank, backwards) < rankValue(best.rank, backwards) ? c : best,
-  );
-}
-
-function highestCard(cards: Card[], backwards: boolean): Card {
-  return cards.reduce((best, c) =>
-    rankValue(c.rank, backwards) > rankValue(best.rank, backwards) ? c : best,
-  );
-}
-
-/**
- * How dangerous it is to be holding `card` in this negative hand type — used to prioritize what
- * to discard first when void and free to play anything. Higher means "discard sooner."
- */
-function dangerScore(card: Card, handType: NegativeHandType): number {
-  switch (handType) {
-    case "noHearts":
-      return card.suit === "H" ? 100 + card.rank : 0;
-    case "noKingOfHearts":
-      return card.suit === "H" && card.rank === 13 ? 1000 : 0;
-    case "noGentlemen":
-      return card.rank === 13 || card.rank === 11 ? 100 + card.rank : 0;
-    case "noLady":
-      return card.rank === 12 ? 100 + card.rank : 0;
-    case "noTricks":
-    case "noLastTwo":
-      return card.rank;
+  difficulty: Difficulty = "normal",
+  random: RandomSource = Math.random,
+): Card {
+  switch (difficulty) {
+    case "hard":
+      return ismctsChooseCard(state, player, HARD_BUDGET_MS, random);
+    case "expert":
+      return ismctsChooseCard(state, player, EXPERT_BUDGET_MS, random);
+    case "normal":
+      return chooseCardHeuristic(state, player, true);
+    case "easy": {
+      const legal = legalCardsFor(state, player);
+      if (legal.length > 1 && random() < EASY_RANDOMNESS) {
+        return legal[Math.floor(random() * legal.length)];
+      }
+      return chooseCardHeuristic(state, player, false);
+    }
   }
-}
-
-function mostDangerous(cards: Card[], handType: NegativeHandType): Card {
-  return cards.reduce((best, c) => (dangerScore(c, handType) > dangerScore(best, handType) ? c : best));
-}
-
-// No Last Two Tricks: only the final 2 tricks (13 total) carry any penalty risk. Tricks before
-// that are free to win — the skill's own guidance: "track trick count remaining; bias toward not
-// winning tricks 12 and 13 in particular, which requires the bot to reason about trick-count, not
-// just card rank."
-const NO_LAST_TWO_SAFE_TRICKS = 11;
-
-/**
- * Picks a card to play for `player`, given the full game state. Tier 1 heuristic bot — see
- * .claude/skills/king-ai-opponent. Always legal: every branch below chooses only from
- * `legalCardsFor`, never a hand-rolled legality check.
- *
- * The core trick: reuse `resolveTrick` itself (via `wouldCurrentlyWin`) to ask "would playing
- * this card currently win the trick?" — that single primitive drives both "avoid winning"
- * (negative hands) and "win cheaply" (positive hands) without reimplementing rank/trump
- * comparisons.
- */
-export function chooseCard(state: GameState, player: PlayerIndex): Card {
-  const legal = legalCardsFor(state, player);
-  if (legal.length === 1) return legal[0];
-
-  const ruleSet = currentRuleSet(state);
-  const isPositive = state.handType === "positive";
-
-  if (state.handType === "noLastTwo" && state.completedTricks.length < NO_LAST_TWO_SAFE_TRICKS) {
-    // Winning right now is free — shed the highest card while there's no cost to it, rather than
-    // hoarding high cards defensively (which only leaves them stuck holding danger once tricks
-    // 12-13 actually arrive). Applies whether leading, following, or discarding void: dumping the
-    // single highest legal card is always the right move here, no other logic needed.
-    return highestCard(legal, ruleSet.backwards);
-  }
-
-  if (state.currentTrick.length === 0) {
-    // Leading: "would currently win" is vacuous (nothing to beat yet), so this is handled
-    // separately — negative hands lead low (safest), positive hands lead high (aggressive).
-    return isPositive ? highestCard(legal, ruleSet.backwards) : lowestCard(legal, ruleSet.backwards);
-  }
-
-  const trumpSuit = currentTrumpSuit(state);
-  const winners = legal.filter((card) => wouldCurrentlyWin(state, player, card, trumpSuit, ruleSet));
-  const nonWinners = legal.filter((card) => !winners.includes(card));
-
-  if (isPositive) {
-    if (winners.length > 0) return lowestCard(winners, ruleSet.backwards); // win as cheaply as possible
-    return lowestCard(nonWinners.length > 0 ? nonWinners : legal, ruleSet.backwards); // duck cheaply, preserve strong cards
-  }
-
-  if (nonWinners.length === 0) return lowestCard(legal, ruleSet.backwards); // forced to win — least-bad option
-
-  const ledSuit = state.currentTrick[0].card.suit;
-  const isVoidDiscard = !legal.some((c) => c.suit === ledSuit);
-  return isVoidDiscard
-    ? mostDangerous(nonWinners, state.handType as NegativeHandType)
-    : lowestCard(nonWinners, ruleSet.backwards); // following suit: duck under with the lowest safe card
 }

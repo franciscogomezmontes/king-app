@@ -6,7 +6,7 @@ function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
 }
 
-const strongHand = [card("S", 14), card("H", 14), card("D", 14), card("C", 13)]; // estimateTricks = 5
+const strongHand = [card("S", 14), card("H", 14), card("D", 14), card("C", 13)]; // estimateTricks = 3
 const weakHand = [card("S", 2), card("H", 3), card("D", 4), card("C", 5)]; // estimateTricks = 0
 
 function stateWithBids(hand: Card[], bids: AuctionBid[]): GameState {
@@ -27,8 +27,11 @@ function stateWithBids(hand: Card[], bids: AuctionBid[]): GameState {
 }
 
 describe("chooseBid", () => {
-  it("bids its hand estimate when it exceeds the current high bid", () => {
-    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(5);
+  it("bids BID_MARGIN below its hand estimate, not the estimate itself, when that still exceeds the current high bid", () => {
+    // strongHand's estimateTricks is 3 (see its own comment above); a winning bid nets
+    // (actual - bid) * 25 at scoring time, so bidding the raw estimate is an ~0-EV move by
+    // construction — see BID_MARGIN's doc comment in auction.ts.
+    expect(chooseBid(stateWithBids(strongHand, []), 1)).toBe(1);
   });
 
   it("declines when its estimate doesn't exceed the current high bid", () => {

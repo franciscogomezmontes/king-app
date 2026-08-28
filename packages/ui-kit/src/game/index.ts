@@ -1,5 +1,7 @@
 export * from "./PlayingCard";
+export * from "./Avatar";
 export * from "./AuctionSummary";
+export * from "./AuctionLog";
 export * from "./CardBack";
 export * from "./DealerBadge";
 export * from "./Hand";
@@ -7,4 +9,6 @@ export * from "./OpponentSeat";
 export * from "./Table";
 export * from "./TrickPile";
 export * from "./ScorePanel";
+export * from "./ScoreProgress";
 export * from "./Scoreboard";
+export * from "./WinCelebration";

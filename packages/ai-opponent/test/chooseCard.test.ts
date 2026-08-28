@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   Card,
+  createDeck,
   createGame,
   DEFAULT_GAME_RULES,
   GameState,
@@ -10,9 +11,23 @@ import {
   Trick,
 } from "rules-engine";
 import { chooseCard } from "../src/chooseCard";
+import { chooseCardHeuristic } from "../src/heuristic";
+import { ismctsChooseCard } from "../src/ismcts";
 
 function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
+}
+
+// Same small deterministic PRNG used throughout this package's other ISMCTS tests.
+function mulberry32(seed: number) {
+  let s = seed;
+  return () => {
+    s |= 0;
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
 function dummyTrick(winner: PlayerIndex): Trick {
@@ -25,6 +40,13 @@ function dummyTrick(winner: PlayerIndex): Trick {
     ],
     winner,
   };
+}
+
+/** A completed trick with caller-specified plays — for tests that need specific cards to have
+ * already fallen (e.g. to make a card a "master"). The winner is arbitrary; nothing under test
+ * reads it. */
+function dummyTrickOf(plays: { player: PlayerIndex; card: Card }[]): Trick {
+  return { plays, winner: plays[0].player };
 }
 
 function withPositiveSetup(state: GameState, trump: Card["suit"] | null = null): GameState {
@@ -68,8 +90,153 @@ describe("chooseCard — leading", () => {
   });
 });
 
+describe("chooseCard — negative-hand leading avoids self-evidently dominated master leads", () => {
+  // Francisco's exact scenario: No Queens (negative, no trump), no clubs played by anyone yet, the
+  // bot holds the entire top of the club suit itself (Ace, King, Queen) — so leading any of them
+  // is a proven master with zero chance of losing its own trick, exactly backwards for a hand
+  // whose entire goal is to avoid winning. A safe, non-dominated alternative (a low diamond) is
+  // available instead.
+  function stateWithMasterClubsAndASafeAlternative(): GameState {
+    return {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLady",
+      hands: { 0: [card("C", 14), card("C", 13), card("C", 12), card("D", 2)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+  }
+
+  it("chooseCardHeuristic (Normal): leads the safe diamond, not a proven-master club", () => {
+    const led = chooseCard(stateWithMasterClubsAndASafeAlternative(), 0, "normal");
+    expect(led.suit).not.toBe("C");
+    expect(led).toEqual(card("D", 2));
+  });
+
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): never leads a proven-master club when a safe alternative exists", () => {
+    // Test-scoped small budgets, same pattern as hardVsNormal.test.ts's TEST_SEARCH_BUDGET_MS —
+    // proves the root-filter mechanism itself, not a specific production budget.
+    for (const budgetMs of [15, 50]) {
+      const led = ismctsChooseCard(stateWithMasterClubsAndASafeAlternative(), 0, budgetMs, mulberry32(7));
+      expect(led.suit).not.toBe("C");
+      expect(led).toEqual(card("D", 2));
+    }
+  });
+});
+
+describe("chooseCard — negative-hand leading avoids this hand type's own danger category", () => {
+  // Francisco's exact bug report: at Expert difficulty, in "No J's ni K's" (noGentlemen), a bot
+  // led the very first trick of the hand with a King or Jack. The lowest-ranked card *available*
+  // happens to be a Jack here — plain "lead lowest" would pick it, exactly backwards for a hand
+  // whose entire goal is to avoid capturing a Jack or King. A safe non-J/K alternative (a Queen)
+  // exists instead and should be preferred, even though it outranks the Jack.
+  function stateWithLowestCardDangerousForNoGentlemen(): GameState {
+    return {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: [card("D", 13), card("S", 11), card("H", 12), card("C", 14)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+  }
+
+  it("chooseCardHeuristic (Normal): leads the safe Queen, not the lower-ranked but dangerous Jack", () => {
+    const led = chooseCard(stateWithLowestCardDangerousForNoGentlemen(), 0, "normal");
+    expect(led).toEqual(card("H", 12));
+  });
+
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): never leads a Jack or King when a safe alternative exists", () => {
+    for (const budgetMs of [15, 50]) {
+      const led = ismctsChooseCard(stateWithLowestCardDangerousForNoGentlemen(), 0, budgetMs, mulberry32(7));
+      expect(led.rank).not.toBe(11);
+      expect(led.rank).not.toBe(13);
+    }
+  });
+
+  it("forced position: every legal lead is dangerous (only Jacks/Kings left) — falls back to the lowest of them", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: [card("D", 13), card("S", 11)], 1: [], 2: [], 3: [] },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+    expect(chooseCard(state, 0)).toEqual(card("S", 11));
+  });
+
+  // A second, direct regression test for a live-report scenario (2026-08-17): two fresh Experto
+  // screenshots showed a bot leading a King or Jack as the OPENING lead of a noGentlemen trick —
+  // confirmed an opening lead (not a void discard) by card counts, the leader being the only seat
+  // down a card. Unlike the two scenarios above (an edge case where every non-J/K card is *more*
+  // dangerous by rank, and a fully-forced all-J/K hand), this is a perfectly ordinary 13-card hand
+  // with plenty of genuinely safe low cards sitting right there — the plainest possible case, and
+  // exactly what safeNegativeLeads/excludeDangerousLeads plus ismctsChooseCard's root-candidate
+  // restriction are supposed to prevent regardless of how the danger/safe cards happen to rank
+  // against each other.
+  //
+  // Deliberately NOT the `hands: {0: [...], 1: [], 2: [], 3: []}` shape the two scenarios above
+  // use — that shape is fine for chooseCardHeuristic (which only ever reads the deciding player's
+  // own hand), but it's a self-inconsistent GameState for ismctsChooseCard: determinizeHands has to
+  // redistribute every unseen card (the full deck minus the decider's own hand and whatever's been
+  // played) across the other three seats' `hands[seat].length` targets, and 0/0/0 can't absorb 44
+  // unseen cards. Both scenarios above never actually surfaced that, for a specific reason worth
+  // recording: their hands were crafted small enough (via nonDominatedLeads + excludeDangerousLeads)
+  // that exactly one safe candidate survived the root filter, and ismctsChooseCard short-circuits
+  // on a single root candidate *before* ever calling determinizeHands (see its own `rootCandidates
+  // !== null && rootCandidates.length === 1` early return) — so neither of those tests exercised a
+  // real ISMCTS search over multiple surviving candidates at all. This one deliberately leaves
+  // several safe candidates in play, with a full, self-consistent 13/13/13/13 deal, specifically to
+  // exercise that previously-untested path.
+  function ordinaryHandWithAKingAndAJack(): GameState {
+    const myHand: Card[] = [
+      card("D", 13),
+      card("S", 11),
+      card("H", 9),
+      card("C", 6),
+      card("D", 4),
+      card("S", 8),
+      card("H", 2),
+      card("C", 10),
+      card("D", 7),
+      card("S", 5),
+      card("H", 3),
+      card("C", 12),
+      card("H", 14),
+    ];
+    const mine = new Set(myHand.map((c) => `${c.suit}${c.rank}`));
+    const rest = createDeck().filter((c) => !mine.has(`${c.suit}${c.rank}`));
+    return {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noGentlemen",
+      hands: { 0: myHand, 1: rest.slice(0, 13), 2: rest.slice(13, 26), 3: rest.slice(26, 39) },
+      currentTrick: [],
+      currentTurn: 0,
+    };
+  }
+
+  it("chooseCardHeuristic: an ordinary hand with plenty of safe cards never opens with the King or Jack", () => {
+    const led = chooseCardHeuristic(ordinaryHandWithAKingAndAJack(), 0, true);
+    expect(led.rank).not.toBe(11);
+    expect(led.rank).not.toBe(13);
+  });
+
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): an ordinary hand with plenty of safe cards never opens with the King or Jack", () => {
+    for (const budgetMs of [15, 50, 250]) {
+      const led = ismctsChooseCard(ordinaryHandWithAKingAndAJack(), 0, budgetMs, mulberry32(7));
+      expect(led.rank).not.toBe(11);
+      expect(led.rank).not.toBe(13);
+    }
+  });
+});
+
 describe("chooseCard — negative hands, following suit", () => {
-  it("plays the lowest card that still avoids winning, when a safe option exists", () => {
+  it("plays the most dangerous card that still avoids winning, when a safe option exists", () => {
+    // A nonWinner is a permanently safe fact — already beaten by S7, that can't change no matter
+    // what else is played — so this is a zero-cost moment to shed the more dangerous of the two
+    // safe options (S6, ranked higher = more dangerous for noTricks) rather than hoarding it.
     const state: GameState = {
       ...createGame(DEFAULT_GAME_RULES, 0),
       phase: "playing",
@@ -78,8 +245,8 @@ describe("chooseCard — negative hands, following suit", () => {
       currentTrick: [{ player: 0, card: card("S", 7) }],
       currentTurn: 1,
     };
-    // S3 and S6 are both safe (under S7); S10 would win. Lowest safe is S3.
-    expect(chooseCard(state, 1)).toEqual(card("S", 3));
+    // S3 and S6 are both safe (under S7); S10 would win. Most dangerous of the safe two is S6.
+    expect(chooseCard(state, 1)).toEqual(card("S", 6));
   });
 
   it("when forced to win (every follower beats the current best), plays the lowest of them", () => {
@@ -92,6 +259,23 @@ describe("chooseCard — negative hands, following suit", () => {
       currentTurn: 1,
     };
     expect(chooseCard(state, 1)).toEqual(card("S", 9));
+  });
+
+  it("No Queens: sheds the Queen under a safe non-winning follow rather than hoarding it", () => {
+    // Francisco's exact scenario: the leader plays an Ace, the bot holds the Queen of that suit
+    // plus other, genuinely safer low cards it could legally follow with instead. The Queen is a
+    // permanently safe discard here (it can never beat an already-played Ace), so the bot should
+    // take the zero-cost opportunity to get rid of it now rather than keep holding the danger card
+    // and hope for another safe window later.
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noLady",
+      hands: { 0: [], 1: [card("S", 12), card("S", 4), card("S", 6)], 2: [], 3: [] },
+      currentTrick: [{ player: 0, card: card("S", 14) }],
+      currentTurn: 1,
+    };
+    expect(chooseCard(state, 1)).toEqual(card("S", 12));
   });
 });
 
@@ -123,6 +307,28 @@ describe("chooseCard — negative hands, void discards", () => {
   }
 });
 
+describe("chooseCard — ISMCTS mid-trick discard of a danger card (Difícil/Experto)", () => {
+  // Francisco's exact bug report: in "No K de Corazones," a bot already void in two suits held the
+  // King of Hearts long past its first free, safe chance to discard it, only shedding it much
+  // later once the hand was well underway — unlike a real player, who'd dump it the instant it's
+  // safe. Tier 1 ("normal") already gets this right (see the "void discards" block above); this
+  // covers the same scenario at ISMCTS's own root-candidate level (`safeNegativeDiscard`).
+  it("discards the King of Hearts the first time it's a free, safe void discard, not later", () => {
+    const state: GameState = {
+      ...createGame(DEFAULT_GAME_RULES, 0),
+      phase: "playing",
+      handType: "noKingOfHearts",
+      hands: { 0: [], 1: [card("H", 13), card("C", 2), card("C", 5)], 2: [], 3: [] },
+      // Led suit is spades; player 1 holds no spades, so every card here is a free void discard.
+      currentTrick: [{ player: 0, card: card("S", 4) }],
+      currentTurn: 1,
+    };
+    for (const budgetMs of [15, 50, 250]) {
+      expect(ismctsChooseCard(state, 1, budgetMs, mulberry32(7))).toEqual(card("H", 13));
+    }
+  });
+});
+
 describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winning only at the end", () => {
   it("safe zone (tricks 1-11): leads the highest card, not the lowest", () => {
     const state: GameState = {
@@ -152,7 +358,7 @@ describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winn
     expect(chooseCard(state, 1)).toEqual(card("S", 10));
   });
 
-  it("danger zone (tricks 12-13): reverts to the normal avoid-winning strategy", () => {
+  it("danger zone (tricks 12-13): reverts to the normal avoid-winning strategy, shedding the most dangerous safe card", () => {
     const state: GameState = {
       ...createGame(DEFAULT_GAME_RULES, 0),
       phase: "playing",
@@ -162,7 +368,153 @@ describe("chooseCard — No Last Two Tricks: dumps high cards early, avoids winn
       currentTrick: [{ player: 0, card: card("S", 7) }],
       currentTurn: 1,
     };
-    expect(chooseCard(state, 1)).toEqual(card("S", 3));
+    // S3 and S6 are both safe (under S7); S10 would win. Most dangerous of the safe two is S6.
+    expect(chooseCard(state, 1)).toEqual(card("S", 6));
+  });
+});
+
+describe('chooseCard — "normal" difficulty leading, card-tracking aware', () => {
+  it("leads a master card over a merely-higher-ranked but unproven one", () => {
+    // Spades' Ace, King, and Queen are already gone — the 10 of spades is now the highest
+    // remaining spade (a "master"), even though the King of Diamonds outranks it numerically and
+    // is what the flat highest-card heuristic would pick instead.
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        completedTricks: [
+          dummyTrickOf([
+            { player: 1, card: card("S", 14) },
+            { player: 2, card: card("S", 13) },
+            { player: 3, card: card("S", 12) },
+            { player: 0, card: card("S", 11) },
+          ]),
+        ],
+        hands: { 0: [card("S", 10), card("D", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      null,
+    );
+    expect(chooseCard(state, 0, "normal")).toEqual(card("S", 10));
+  });
+
+  it("does NOT lead a merely-decent (length 3) trump holding when a higher trump is still unseen", () => {
+    // Trump is hearts. The bot holds the King of hearts plus two low hearts (length 3) — a
+    // decent holding, but not proven control: the Ace of hearts is neither played nor in the
+    // bot's own hand, so it's still out there and could beat the King. No real player would risk
+    // leading the King away here; the bot should lead a safe side card instead.
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: {
+          0: [card("H", 13), card("H", 5), card("H", 2), card("S", 9), card("D", 7)],
+          1: [],
+          2: [],
+          3: [],
+        },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    const led = chooseCard(state, 0, "normal");
+    expect(led).not.toEqual(card("H", 13));
+    expect(led).toEqual(card("S", 9));
+  });
+
+  it("leads trump to draw it out when holding genuine control length (5+), even with no proven master", () => {
+    // Trump is hearts. The bot holds 5 low/mid hearts — no King or Ace, so no master — but 5 of a
+    // 13-card suit is well above the ~3.25-per-hand average (opponents combined hold at most 8),
+    // enough real control to justify leading trump over a higher-ranked side card.
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: {
+          0: [card("H", 2), card("H", 4), card("H", 6), card("H", 8), card("H", 9), card("S", 13)],
+          1: [],
+          2: [],
+          3: [],
+        },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    expect(chooseCard(state, 0, "normal")).toEqual(card("H", 9));
+  });
+
+  // Francisco's other bug report: bots at Hard/Expert sometimes lead a trump "just to lead it,"
+  // with no real tactical reason — exactly the merely-decent (length 3, no master) trump holding
+  // "normal" already knows to hold back (see the test right above). ISMCTS never inherited that
+  // restraint for its own root decision (see `safePositiveLeads`) — a self-consistent 13/13/13/13
+  // deal is needed here (unlike the length-3 "normal" test above) since excluding trump still
+  // leaves several non-trump candidates for the search to actually weigh, rather than collapsing
+  // to one via the early-return `rootCandidates.length === 1` short-circuit.
+  it("ismctsChooseCard (Difícil/Experto-scale budgets): does NOT lead a merely-decent trump holding either", () => {
+    const myHand: Card[] = [
+      card("H", 13),
+      card("H", 5),
+      card("H", 2),
+      card("S", 9),
+      card("S", 3),
+      card("D", 7),
+      card("D", 11),
+      card("D", 2),
+      card("C", 6),
+      card("C", 10),
+      card("C", 4),
+      card("C", 8),
+      card("C", 14),
+    ];
+    const mine = new Set(myHand.map((c) => `${c.suit}${c.rank}`));
+    const rest = createDeck().filter((c) => !mine.has(`${c.suit}${c.rank}`));
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: myHand, 1: rest.slice(0, 13), 2: rest.slice(13, 26), 3: rest.slice(26, 39) },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    for (const budgetMs of [15, 50, 250]) {
+      const led = ismctsChooseCard(state, 0, budgetMs, mulberry32(7));
+      expect(led.suit).not.toBe("H");
+    }
+  });
+
+  it('"easy" difficulty (heuristic path, no randomness triggered) still leads the flat-highest card', () => {
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: [card("H", 9), card("H", 10), card("H", 11), card("S", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      "H",
+    );
+    const neverRandom = () => 0.99; // stays above EASY_RANDOMNESS's threshold every time
+    expect(chooseCard(state, 0, "easy", neverRandom)).toEqual(card("S", 13));
+  });
+
+  it('"easy" difficulty occasionally overrides the heuristic with a uniformly random legal card', () => {
+    const state: GameState = withPositiveSetup(
+      {
+        ...createGame(DEFAULT_GAME_RULES, 0),
+        phase: "playing",
+        hands: { 0: [card("S", 9), card("H", 2), card("D", 13)], 1: [], 2: [], 3: [] },
+        currentTrick: [],
+        currentTurn: 0,
+      },
+      null,
+    );
+    const alwaysRandomFirst = () => 0; // triggers the random branch, then picks index 0
+    expect(chooseCard(state, 0, "easy", alwaysRandomFirst)).toEqual(card("S", 9));
   });
 });
 
