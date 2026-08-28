@@ -14,12 +14,16 @@ export interface HandCountStepperProps {
 /**
  * One player's numeric entry for the hand currently being recorded — a +/- stepper instead of the
  * system keyboard (per Francisco's own reversal of the family's earlier preference: "es más
- * práctico que se haga con +/- que digitando directamente"). `max` is always the hand type's own
- * real ceiling (`expectedCountFor` in ScorekeeperScreen.tsx — e.g. 13 for No Tricks, 8 for No
- * Gentlemen, 1 for No King of Hearts) so "+" disables itself the instant a player's count can't
- * possibly go any higher for this hand, the same visual tell BidStepper already uses for auction
- * bids (GameScreen.tsx) — this component doesn't share that one's code since it needs to render 4
- * across in a much tighter row, but mirrors its look intentionally.
+ * práctico que se haga con +/- que digitando directamente"). This component only knows its own
+ * `value`/`max` — it doesn't know about the other 3 players' counts at all, so the caller
+ * (ScorekeeperScreen.tsx) is responsible for passing a `max` that already accounts for what the
+ * *other* seats hold, not just the hand type's own raw ceiling (`expectedCountFor` — e.g. 13 for
+ * No Tricks, 8 for No Gentlemen, 1 for No King of Hearts): `value + (handTotal - sumOfAllSeats)`,
+ * so "+" disables itself once the four counts together can't possibly go any higher, not just
+ * once *this* seat individually hits the hand's raw ceiling (a real bug this fixed — e.g. two
+ * players could otherwise each reach 13 in No Hearts, for an impossible total of 26). Same visual
+ * tell BidStepper already uses for auction bids (GameScreen.tsx) — this component doesn't share
+ * that one's code since it needs to render 4 across in a much tighter row, but mirrors its look.
  */
 export function HandCountStepper({ label, value, min = 0, max, onChange, decreaseLabel, increaseLabel }: HandCountStepperProps) {
   const canDecrease = value > min;
@@ -89,14 +93,18 @@ const styles = StyleSheet.create({
     // BidStepper, "−"/"+" both sit slightly below center in this font at this size otherwise.
     marginTop: -2,
   },
+  // Deliberately wider and a touch bigger than the +/- buttons above/below it — Francisco found
+  // the three same-sized boxes confusing to scan at a glance, the value being the one that
+  // actually matters most here.
   value: {
-    minWidth: 32,
+    width: "100%",
+    minWidth: 44,
     textAlign: "center",
     color: colors.ink,
     backgroundColor: colors.cream,
     fontFamily: fonts.bodyBold,
-    fontSize: 18,
+    fontSize: 20,
     borderRadius: radii.sm,
-    paddingVertical: 4,
+    paddingVertical: 6,
   },
 });

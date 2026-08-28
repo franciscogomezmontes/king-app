@@ -48,6 +48,16 @@ function expectedCountFor(handType: HandType): number {
   return handType === "positive" ? POSITIVE_HAND_EXPECTED_TRICKS : NEGATIVE_HAND_EXPECTED_COUNT[handType];
 }
 
+/** How high `seat`'s own stepper can still go — not just `max` (the hand type's own raw ceiling,
+ * e.g. 13 for No Hearts), but that ceiling minus what the *other* seats already hold. Passing the
+ * raw `max` to every seat independently let two players each reach 13 in a hand whose real total
+ * is 13, for an impossible sum of 26 — this instead disables every seat's own "+" the instant the
+ * four counts together can't go any higher, regardless of how that total is currently split. */
+function remainingSeatMax(counts: Record<PlayerIndex, number>, seat: PlayerIndex, max: number): number {
+  const total = ALL_SEATS.reduce((sum: number, s) => sum + counts[s], 0);
+  return counts[seat] + (max - total);
+}
+
 function questionKey(handType: HandType): string {
   return handType === "positive" ? "positive" : handType;
 }
@@ -154,7 +164,7 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
                 key={seat}
                 label={labels[seat]}
                 value={editCounts[seat]}
-                max={editMax}
+                max={remainingSeatMax(editCounts, seat, editMax)}
                 onChange={(next) => setEditCounts((prev) => ({ ...prev, [seat]: next }))}
                 decreaseLabel={t("scorekeeper:count.decrease", { name: labels[seat] })}
                 increaseLabel={t("scorekeeper:count.increase", { name: labels[seat] })}
@@ -287,7 +297,7 @@ export function ScorekeeperScreen({ onExit }: ScorekeeperScreenProps) {
                 key={seat}
                 label={labels[seat]}
                 value={state.draftCounts[seat]}
-                max={max}
+                max={remainingSeatMax(state.draftCounts, seat, max)}
                 onChange={(next) => setCount(seat, next)}
                 decreaseLabel={t("scorekeeper:count.decrease", { name: labels[seat] })}
                 increaseLabel={t("scorekeeper:count.increase", { name: labels[seat] })}
