@@ -10,8 +10,9 @@ interface StoredAddress {
 
 const VERSION = 1 as const;
 
-/** No default: there's no deployment for this slice (LAN-only), so there's no fixed URL to fall
- * back to — the player must have typed their host's LAN address at least once. */
+/** No default of its own — `null` just means this device has never saved an address. The build's
+ * own default (EXPO_PUBLIC_KING_SERVER_URL, see apps/mobile/.env.example) lives in the caller
+ * (OnlineScreen.tsx's Lobby), not here, so this stays a pure "what did we persist" read. */
 export async function loadServerAddress(storage: KeyValueStorage = AsyncStorage): Promise<string | null> {
   try {
     const raw = await storage.getItem(STORAGE_KEY);

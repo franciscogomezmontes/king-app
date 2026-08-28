@@ -82,6 +82,20 @@ export function closeAll(rooms: TrackedRoom[]): Promise<unknown> {
   return Promise.all(rooms.map((r) => r.room.leave()));
 }
 
+/** Resumes a dropped seat via its `reconnectionToken` — the network equivalent of
+ * `KingRoom.onLeave`'s `allowReconnection` grace window actually succeeding. Pair with
+ * `tracked.room.leave(false)` (an *unconsented* leave — `leave(true)`/`leave()`'s default frees
+ * the seat immediately instead, same as a real player backing out to the menu) to simulate the
+ * "lost signal, comes back" case this exists for. */
+export async function reconnectPlayer(
+  colyseus: ColyseusTestServer,
+  reconnectionToken: string,
+  seat: PlayerIndex,
+): Promise<TrackedRoom> {
+  const room = await colyseus.sdk.reconnect<unknown>(reconnectionToken);
+  return track(room, seat);
+}
+
 /** Plays one legal card for whichever seat's turn it is, using `rooms[0]`'s envelope as the single
  * source of truth for "what should happen next" (an individual actor's own envelope may not have
  * been delivered yet the instant after another seat acts — driving off one consistent reference

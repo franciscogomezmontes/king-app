@@ -44,6 +44,10 @@ function zeroSeatRecord<T>(value: T): Record<PlayerIndex, T> {
  */
 export class KingRoom extends Room {
   maxClients = 4;
+  // How long a seat stays reserved after an unconsented disconnect (lost signal, app backgrounded,
+  // etc.) before it's freed for someone else to take over — long enough to survive a real phone
+  // dropping in and out of signal, short enough that an abandoned table doesn't sit stuck forever.
+  private static readonly RECONNECTION_GRACE_SECONDS = 120;
 
   private game!: GameState;
   private auctionTurn: AuctionTurnState = INITIAL_AUCTION_TURN;
@@ -81,10 +85,41 @@ export class KingRoom extends Room {
     }
   }
 
-  onLeave(client: Client<ClientUserData>) {
+  /**
+   * `consented` (Colyseus-provided) distinguishes an explicit leave — the player backed out to
+   * the menu, `room.leave()` on the client — from an unconsented drop (lost signal, backgrounded
+   * app, tab closed without warning): a consented leave frees the seat immediately, since no
+   * reconnection is coming; an unconsented one gets a real grace window via `allowReconnection`
+   * instead, matching the physical-table experience of "someone stepped away, the hand keeps
+   * waiting" rather than losing a seat over a momentary blip.
+   */
+  async onLeave(client: Client<ClientUserData>, consented: boolean) {
     const seat = client.userData?.seat;
     if (seat === undefined) return;
     this.seatConnected[seat] = false;
+    this.broadcastState();
+
+    if (consented) {
+      this.freeSeat(seat);
+      return;
+    }
+
+    try {
+      await this.allowReconnection(client, KingRoom.RECONNECTION_GRACE_SECONDS);
+      this.seatConnected[seat] = true;
+      this.broadcastState();
+    } catch {
+      // Nobody reconnected within the grace window — this seat is gone for good this game. A
+      // later joiner can take it over (onJoin's findIndex sees it as free again), inheriting
+      // whatever cards are already dealt to it — same as a substitute stepping into an abandoned
+      // hand at a physical table.
+      this.freeSeat(seat);
+    }
+  }
+
+  private freeSeat(seat: PlayerIndex) {
+    this.seats[seat] = null;
+    this.seatLabels[seat] = "";
     this.broadcastState();
   }
 

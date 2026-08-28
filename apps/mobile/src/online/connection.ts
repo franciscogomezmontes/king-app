@@ -50,3 +50,12 @@ export async function joinOnlineRoomByCode(address: string, code: string, displa
   const roomId = await resolveRoomCode(address, code);
   return client.joinById<unknown>(roomId, { displayName });
 }
+
+/** Resumes a previously-connected room after an unconsented drop (lost signal, backgrounded app),
+ * using the `reconnectionToken` that room handed out while still connected — see
+ * KingRoom.onLeave's own `allowReconnection` grace window on the server side. Throws once that
+ * window has expired; the caller falls back to treating it as a real disconnect at that point. */
+export async function reconnectOnlineRoom(address: string, reconnectionToken: string): Promise<Room<unknown>> {
+  const client = new Client(wsUrl(address));
+  return client.reconnect<unknown>(reconnectionToken);
+}

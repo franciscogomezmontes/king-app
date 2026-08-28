@@ -7,6 +7,7 @@ import {
   closeAll,
   connectFourPlayers,
   playOneLegalCard,
+  reconnectPlayer,
   waitFor,
   waitForError,
 } from "./helpers";
@@ -164,4 +165,50 @@ describe("KingRoom — auction bid-turn order (server-enforced, rules-engine doe
 
     await closeAll(rooms);
   }, 30000);
+});
+
+describe("KingRoom — reconnection", () => {
+  it("resumes the same seat, with its hand intact, after an unconsented drop", async () => {
+    const rooms = await connectFourPlayers(colyseus);
+    for (const r of rooms) await waitFor(r, (e) => e.game.phase === "playing");
+
+    const dropped = rooms[1];
+    const reconnectionToken = dropped.room.reconnectionToken;
+    const handBefore = dropped.envelope!.game.hands[1];
+
+    // `leave(false)` -- an *unconsented* leave, simulating a lost connection rather than the
+    // player choosing to back out (see closeAll's own leave(), which defaults to consented).
+    await dropped.room.leave(false);
+    await waitFor(rooms[0], (e) => !e.seatConnected[1]);
+
+    const resumed = await reconnectPlayer(colyseus, reconnectionToken, 1);
+    await waitFor(resumed, (e) => e.seatConnected[1]);
+    expect(resumed.envelope!.mySeat).toBe(1);
+    // The reconnected client sees its own real hand, unchanged -- never redealt or redacted to
+    // itself, exactly the same state it had right before dropping.
+    expect(resumed.envelope!.game.hands[1]).toEqual(handBefore);
+    // The other seats' view of the resumed seat also flips back to connected.
+    await waitFor(rooms[0], (e) => e.seatConnected[1]);
+
+    await closeAll([rooms[0], rooms[2], rooms[3], resumed]);
+  }, 20000);
+
+  it("frees the seat immediately on a consented leave, letting a new player take it over", async () => {
+    const rooms = await connectFourPlayers(colyseus);
+    for (const r of rooms) await waitFor(r, (e) => e.game.phase === "playing");
+
+    const roomId = rooms[1].room.roomId;
+    // Default leave() is consented -- the player backing out to the menu, not a dropped
+    // connection -- so KingRoom.onLeave should free the seat right away, with no grace window.
+    await rooms[1].room.leave();
+    await waitFor(rooms[0], (e) => !e.seatConnected[1]);
+
+    // A brand new join (not a reconnect -- no token involved) succeeds into the now-free seat 1,
+    // where a still-open `allowReconnection` grace window would otherwise have kept it reserved.
+    const replacement = await colyseus.sdk.joinById<unknown>(roomId, { displayName: "Zara" });
+    await waitFor(rooms[0], (e) => e.seatConnected[1] && e.seatLabels[1] === "Zara");
+
+    await closeAll([rooms[0], rooms[2], rooms[3]]);
+    await replacement.leave();
+  }, 20000);
 });

@@ -57,7 +57,10 @@ export function OnlineScreen({ onExit }: OnlineScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (status === "connected" && envelope !== null) {
+  // "reconnecting" keeps rendering the last-known envelope (never cleared entering that status —
+  // see store.ts) instead of falling back to the Lobby, so a momentary drop shows a banner over
+  // the still-current table instead of flashing the host/join choice screen underneath it.
+  if ((status === "connected" || status === "reconnecting") && envelope !== null) {
     if (envelope.game.phase === "awaiting-deal") {
       return <WaitingRoom store={store} envelope={envelope} onExit={onExit} />;
     }
@@ -65,6 +68,7 @@ export function OnlineScreen({ onExit }: OnlineScreenProps) {
       <ActiveOnlineGame
         store={store}
         saveHistoryEnabled={settings.saveHistoryEnabled}
+        reconnecting={status === "reconnecting"}
         onExit={onExit}
       />
     );
@@ -96,7 +100,12 @@ function Lobby({
 
   useEffect(() => {
     loadServerAddress().then((saved) => {
+      // A previously-saved address (this device's own last-used one) always wins over the build's
+      // default — see apps/mobile/.env.example. Neither is forced on the player: the field stays
+      // editable either way, and typing a different address here doesn't overwrite the saved one
+      // until they actually host/join with it (see submitHost/submitJoin below).
       if (saved !== null) setAddress(saved);
+      else if (process.env.EXPO_PUBLIC_KING_SERVER_URL) setAddress(process.env.EXPO_PUBLIC_KING_SERVER_URL);
     });
   }, []);
 
@@ -298,10 +307,12 @@ function turnMessage(
 function ActiveOnlineGame({
   store,
   saveHistoryEnabled,
+  reconnecting,
   onExit,
 }: {
   store: OnlineGameStoreHook;
   saveHistoryEnabled: boolean;
+  reconnecting: boolean;
   onExit: () => void;
 }) {
   const { t } = useTranslation();
@@ -369,6 +380,8 @@ function ActiveOnlineGame({
             </View>
           </View>
         </View>
+
+        {reconnecting && <Text style={styles.disconnectedBanner}>{t("online:reconnecting")}</Text>}
 
         {disconnectedSeats.length > 0 && (
           <Text style={styles.disconnectedBanner}>
