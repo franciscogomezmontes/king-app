@@ -11,9 +11,10 @@ export interface AuctionBid {
 }
 
 /**
- * A resolved auction: `winner` gets to name trump. At scoring time, `bid` tricks transfer from
- * `winner`'s trick tally to `dealer`'s — see `applyAuctionTransfer` in scoring.ts. Note this is
- * the winning *bid* amount, not however many tricks `winner` actually ends up capturing.
+ * A resolved auction: `winner` gets to name trump. At scoring time, `winner` pays `dealer`
+ * `bid * AUCTION_BID_POINTS_PER_TRICK[direction]` points — see `applyAuctionSettlement` in
+ * scoring.ts. Note this is the winning *bid* amount, not however many tricks `winner` actually
+ * ends up capturing.
  */
 export interface AuctionResult {
   dealer: PlayerIndex;
@@ -40,7 +41,7 @@ export function highestBid(bids: AuctionBid[]): AuctionBid | null {
  * - Otherwise the dealer chooses whether to accept the highest bid via `dealerSells`, unless
  *   `ruleSet.auctionMustSell` is on, which removes that choice and forces acceptance.
  * - Dealer declines (and isn't forced to sell): returns null, same as no bids.
- * - Dealer accepts: returns the winning bid as an `AuctionResult` for `applyAuctionTransfer`.
+ * - Dealer accepts: returns the winning bid as an `AuctionResult` for `applyAuctionSettlement`.
  */
 export function resolveAuction(
   bids: AuctionBid[],

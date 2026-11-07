@@ -1,0 +1,50 @@
+name: Deploy web build to GitHub Pages
+
+# Publishes a static, client-only build of apps/mobile (Scorekeeper + Solo vs Computer) so anyone
+# with the link can try it in a browser. Online Multiplayer isn't reachable from this build — there's
+# no public game server, only LAN — see king-app CLAUDE.md's "Online Multiplayer" section.
+#
+# One-time setup this workflow depends on but can't do itself: repo Settings -> Pages -> Build and
+# deployment -> Source must be set to "GitHub Actions".
+
+on:
+  push:
+    # club-rey-visual is the actual active development line right now (main is 11 commits behind
+    # as of this workflow's introduction) — deploys from whichever branch is really moving.
+    branches: [main, club-rey-visual]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Export static web build
+        run: pnpm --filter mobile exec expo export --platform web --output-dir dist
+      - name: Rewrite absolute asset paths for the /king-app/ subpath
+        run: node scripts/fix-web-basepath.js dist /king-app
+        working-directory: apps/mobile
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/mobile/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

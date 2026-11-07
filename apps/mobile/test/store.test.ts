@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { chooseBid, chooseCard, chooseDealerDecision, chooseTrumpDeclaration, shouldOpenAuction } from "ai-opponent";
-import { GameRules, GameState, PlayerIndex } from "rules-engine";
-import { createGameStore, Difficulty, pendingDecision } from "../src/game/store";
+import { applyAction, createDeck, createGame, DEFAULT_GAME_RULES, GameRules, GameState, PlayerIndex, shuffle } from "rules-engine";
+import { INITIAL_AUCTION_TURN } from "../src/game/auctionOrder";
+import { createGameStore, Difficulty, pendingDecision, resumeGameStore } from "../src/game/store";
 
 // Same small deterministic PRNG used throughout this repo's property/integration tests.
 function mulberry32(seed: number) {
@@ -22,32 +23,27 @@ function sum(scores: Record<PlayerIndex, number>): number {
 const HUMAN_SEAT: PlayerIndex = 0;
 
 /**
- * Drives a full game through the store's own public API (playCard/declareTrump/openAuction/
- * submitBid/passBid/dealerDecide) — the same calls GameScreen makes — with seats 1-3 auto-played
- * internally by the store (per `difficulty`) and seat 0 ("human" here) driven externally using
- * ai-opponent, so this exercises the store's orchestration itself, not just the engine beneath it.
+ * Drives an already-constructed store through to game-complete via its own public API
+ * (playCard/declareTrump/openAuction/submitBid/passBid/dealerDecide) — the same calls GameScreen
+ * makes — with seats 1-3 auto-played internally by the store and seat 0 ("human" here) driven
+ * externally using ai-opponent, so this exercises the store's orchestration itself, not just the
+ * engine beneath it. Shared by both a freshly-dealt store and one resumed from a saved session —
+ * from here on, driving either to completion looks identical, which is the point.
  *
  * The store paces bot decisions and trick-completion reveals with real delays for the live UI —
- * `botDelayMs: 0` disables all of that here so the test runs fast, and `waitForIdle()` is awaited
- * after every dispatch so state has fully settled (through any auto-played bot turns) before the
- * next iteration reads it.
+ * tests must pass `botDelayMs: 0` when constructing the store to disable all of that so this runs
+ * fast; `waitForIdle()` is awaited after every dispatch so state has fully settled (through any
+ * auto-played bot turns) before the next iteration reads it.
  */
-async function playFullGameViaStore(
-  ruleSet: GameRules,
-  difficulty: Difficulty,
-  firstDealer: PlayerIndex,
-  seed: number,
-): Promise<GameState> {
-  const random = mulberry32(seed);
-  const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty, firstDealer, random, botDelayMs: 0 });
+async function driveStoreToCompletion(store: ReturnType<typeof createGameStore>): Promise<GameState> {
   await store.getState().waitForIdle(); // settle the initial deal (+ any pre-human bot turns)
 
   const { playCard, declareTrump, openAuction, submitBid, passBid, dealerDecide, continueToNextHand, waitForIdle } =
     store.getState();
 
   for (;;) {
-    const { game, biddingIndex } = store.getState();
-    const decision = pendingDecision(game, biddingIndex);
+    const { game, auctionTurn } = store.getState();
+    const decision = pendingDecision(game, auctionTurn);
     if (decision.kind === "done") return game;
     if (decision.kind === "advance") {
       continueToNextHand();
@@ -84,10 +80,126 @@ async function playFullGameViaStore(
   }
 }
 
+async function playFullGameViaStore(
+  ruleSet: GameRules,
+  difficulty: Difficulty,
+  firstDealer: PlayerIndex,
+  seed: number,
+): Promise<GameState> {
+  const random = mulberry32(seed);
+  const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty, firstDealer, random, botDelayMs: 0 });
+  return driveStoreToCompletion(store);
+}
+
+describe("game store — resuming a saved session", () => {
+  it("restores the exact saved game state rather than dealing fresh", () => {
+    const random = mulberry32(5);
+    let game: GameState = createGame(DEFAULT_GAME_RULES, 0);
+    game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
+    // Play a few cards so the saved state is demonstrably mid-hand, not a fresh deal.
+    for (let i = 0; i < 3; i++) {
+      const player = game.currentTurn;
+      game = applyAction(game, { type: "PLAY_CARD", player, card: chooseCard(game, player) });
+    }
+    const savedHands = JSON.parse(JSON.stringify(game.hands));
+    const savedCurrentTrick = JSON.parse(JSON.stringify(game.currentTrick));
+
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
+      { botDelayMs: 0 },
+    );
+
+    // Read synchronously, right after construction — zustand's create() runs its initializer
+    // synchronously, so this is the state before any auto-play continuation has had a chance to
+    // run yet, proving it started from the saved session and not a fresh deal.
+    expect(store.getState().game.hands).toEqual(savedHands);
+    expect(store.getState().game.currentTrick).toEqual(savedCurrentTrick);
+    expect(store.getState().humanSeat).toBe(HUMAN_SEAT);
+    expect(store.getState().difficulty).toBe("easy");
+  });
+
+  it("a resumed game can still be driven all the way to game-complete", async () => {
+    const random = mulberry32(6);
+    let game: GameState = createGame(DEFAULT_GAME_RULES, 0);
+    game = applyAction(game, { type: "DEAL_HAND", deck: shuffle(createDeck(), random) });
+
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "easy", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
+      { random, botDelayMs: 0 },
+    );
+    const final = await driveStoreToCompletion(store);
+
+    expect(final.phase).toBe("game-complete");
+    expect(final.handHistory).toHaveLength(10);
+  });
+});
+
+describe("game store — trick-reveal pacing", () => {
+  it("keeps showing a hand-ending trick's 4 cards (phase still \"playing\") before flipping to hand-complete", async () => {
+    const ruleSet: GameRules = {
+      mandatoryKilling: false,
+      auctionMustSell: false,
+      playingDownEnabled: false,
+      backwardsEnabled: false,
+      noFaceCardsRedealEnabled: false,
+    };
+    const random = mulberry32(11);
+    // botDelayMs: 0 skips the real pause (irrelevant to this test) but still reports the
+    // intermediate "reveal" state as its own separate store update — this is regression coverage
+    // for the store correctly deferring the phase flip until after that update, not for the pause
+    // actually lasting any particular duration.
+    const store = createGameStore({ ruleSet, humanSeat: HUMAN_SEAT, difficulty: "normal", firstDealer: 0, random, botDelayMs: 0 });
+    await store.getState().waitForIdle();
+
+    const snapshots: { phase: GameState["phase"]; displayTrickLength: number }[] = [];
+    const unsubscribe = store.subscribe((state) => {
+      snapshots.push({ phase: state.game.phase, displayTrickLength: state.displayTrick.length });
+    });
+
+    // Hand 1 is always a negative hand (fixed order), so every decision here is just "play" — play
+    // through its 13 tricks until the hand completes.
+    for (;;) {
+      const { game, auctionTurn } = store.getState();
+      const decision = pendingDecision(game, auctionTurn);
+      if (decision.kind === "advance") break;
+      if (decision.kind !== "play" || decision.player !== HUMAN_SEAT) {
+        throw new Error(`unexpected decision during a negative hand: ${JSON.stringify(decision)}`);
+      }
+      store.getState().playCard(chooseCard(game, decision.player));
+      await store.getState().waitForIdle();
+    }
+    unsubscribe();
+
+    // The reveal update specifically for the hand's LAST trick: all 4 cards showing, immediately
+    // followed by the update that actually flips to hand-complete. Every earlier (mid-hand) trick
+    // also gets a 4-card reveal update, so this must specifically find the one right before the
+    // hand-complete transition, not just the first reveal in the whole hand.
+    const revealIndex = snapshots.findIndex(
+      (s, i) => s.displayTrickLength === 4 && s.phase !== "hand-complete" && snapshots[i + 1]?.phase === "hand-complete",
+    );
+    expect(revealIndex).toBeGreaterThanOrEqual(0);
+    // The bug this guards against: that reveal update instead already reporting "hand-complete",
+    // which skips straight past the live table to the scoreboard in the same instant.
+    expect(snapshots[revealIndex].phase).toBe("playing");
+  });
+});
+
 describe("game store — full games via the public API", () => {
   const ruleSetCombos: GameRules[] = [
-    { mandatoryKilling: false, auctionMustSell: false, playingDownEnabled: false, backwardsEnabled: false },
-    { mandatoryKilling: true, auctionMustSell: true, playingDownEnabled: true, backwardsEnabled: true },
+    {
+      mandatoryKilling: false,
+      auctionMustSell: false,
+      playingDownEnabled: false,
+      backwardsEnabled: false,
+      noFaceCardsRedealEnabled: false,
+    },
+    {
+      mandatoryKilling: true,
+      auctionMustSell: true,
+      playingDownEnabled: true,
+      backwardsEnabled: true,
+      noFaceCardsRedealEnabled: true,
+    },
   ];
 
   for (const difficulty of ["easy", "normal"] as const) {
@@ -104,4 +216,66 @@ describe("game store — full games via the public API", () => {
       }
     });
   }
+});
+
+describe("game store — bots always take the free no-face-cards redeal (Errores bobos row 23)", () => {
+  it("a bot dealt a positive hand with no face cards gets redealt before it ever plays a card of it", async () => {
+    // Build a self-consistent 52-card deal by hand: seat 1 (the dealer/trumpNamer, a bot) gets 13
+    // of the 36 non-face (rank 2-10) cards — zero J/Q/K/A, exactly the "sin figuras" trigger —
+    // and the other 39 cards (the remaining 23 non-face cards plus all 16 face cards) split
+    // evenly across the other three seats.
+    const deck = createDeck();
+    const nonFace = deck.filter((c) => c.rank < 11);
+    const noFaceHand = nonFace.slice(0, 13);
+    const remaining = deck.filter((c) => !noFaceHand.some((n) => n.suit === c.suit && n.rank === c.rank));
+    expect(noFaceHand).toHaveLength(13);
+    expect(remaining).toHaveLength(39);
+
+    const game: GameState = {
+      ruleSet: { ...DEFAULT_GAME_RULES, noFaceCardsRedealEnabled: true },
+      firstDealer: 1,
+      handIndex: 6, // any "positive" index
+      handType: "positive",
+      dealer: 1,
+      phase: "trump-selection",
+      hands: { 0: remaining.slice(0, 13), 1: noFaceHand, 2: remaining.slice(13, 26), 3: remaining.slice(26, 39) },
+      completedTricks: [],
+      currentTrick: [],
+      currentTurn: 1,
+      positiveSetup: {
+        trumpNamer: 1,
+        trump: null,
+        direction: "up",
+        backwards: false,
+        auctionOpened: false,
+        bids: [],
+        auction: null,
+      },
+      cumulativeScores: { 0: 0, 1: 0, 2: 0, 3: 0 },
+      handHistory: [],
+    };
+
+    const random = mulberry32(99);
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "normal", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
+      { random, botDelayMs: 0 },
+    );
+
+    const snapshots: GameState[] = [];
+    const unsubscribe = store.subscribe((s) => snapshots.push(s.game));
+    await store.getState().waitForIdle();
+    unsubscribe();
+
+    function sameHand(a: typeof noFaceHand, b: typeof noFaceHand): boolean {
+      return a.length === b.length && a.every((c, i) => c.suit === b[i].suit && c.rank === b[i].rank);
+    }
+
+    // The only thing that can change seat 1's hand before they've played any card of this hand is
+    // a REQUEST_REDEAL (a fresh DEAL_HAND only happens between hands) — so finding a snapshot
+    // where it differs from the original face-less hand proves the redeal fired, not chance.
+    const redealt = snapshots.find((s) => !sameHand(s.hands[1], noFaceHand));
+    expect(redealt).toBeDefined();
+    expect(redealt!.completedTricks.some((t) => t.plays.some((p) => p.player === 1))).toBe(false);
+    expect(redealt!.currentTrick.some((p) => p.player === 1)).toBe(false);
+  });
 });

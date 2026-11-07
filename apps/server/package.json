@@ -2,5 +2,30 @@
   "name": "server",
   "version": "0.0.1",
   "private": true,
-  "description": "Real-time multiplayer server (Node + Colyseus) — Phase 6, Online Multiplayer. Not yet implemented."
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "Real-time multiplayer server (Node + Colyseus) — Phase 6, Online Multiplayer. Imports rules-engine directly; never duplicates game logic.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@colyseus/core": "0.16.24",
+    "@colyseus/schema": "^3.0.76",
+    "@colyseus/tools": "^0.16.20",
+    "@colyseus/ws-transport": "^0.16.5",
+    "@pm2/io": "^6.1.0",
+    "express": "^4.22.2",
+    "rules-engine": "workspace:*"
+  },
+  "devDependencies": {
+    "@colyseus/testing": "^0.16.3",
+    "@types/express": "^4.17.21",
+    "colyseus.js": "^0.16.22",
+    "tsx": "^4.23.12",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
 }

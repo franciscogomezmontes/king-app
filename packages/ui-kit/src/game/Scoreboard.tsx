@@ -1,8 +1,9 @@
 import type { ReactElement } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { HandType, PlayerIndex } from "rules-engine";
 import { NEGATIVE_HAND_ORDER } from "rules-engine";
 import { useTranslation } from "../i18n";
+import { colors, fonts } from "../theme";
 
 // HAND_SEQUENCE is fixed: all six negative hands, then all four positive hands — so the subtotal
 // boundaries are fixed indices, not something to infer from neighboring entries. (A "does the next
@@ -26,11 +27,20 @@ export interface ScoreboardEntry {
   handType: HandType;
   scores: Record<PlayerIndex, number>;
   positiveSetup: { direction: "up" | "down" } | null;
+  /** Optional: false flags a hand whose entered counts didn't sum to what that hand requires
+   * (e.g. Scorekeeper's own count-vs-expected-total check). Omitted (or true) hands render with no
+   * marker — this keeps a mistake visible in the results table after the fact, not just live while
+   * typing it in. */
+  valid?: boolean;
 }
 
 export interface ScoreboardProps {
   handHistory: ScoreboardEntry[];
   seatLabels: Record<PlayerIndex, string>;
+  /** Optional per-row tap handler — e.g. Scorekeeper's "tap a hand to go back and edit its
+   * counts." Rows only become pressable when this is provided; Solo/History's read-only history
+   * renders exactly as before. */
+  onSelectHand?: (index: number) => void;
 }
 
 function zeroTotals(): Record<PlayerIndex, number> {
@@ -50,7 +60,7 @@ function ruleKey(entry: ScoreboardEntry): string {
  * total... and a final row checks the whole game sums to zero") instead of expecting anyone to
  * remember 10 hands by heart.
  */
-export function Scoreboard({ handHistory, seatLabels }: ScoreboardProps) {
+export function Scoreboard({ handHistory, seatLabels, onSelectHand }: ScoreboardProps) {
   const { t } = useTranslation();
   const running = zeroTotals();
   const negativeSubtotal = zeroTotals();
@@ -67,11 +77,12 @@ export function Scoreboard({ handHistory, seatLabels }: ScoreboardProps) {
       else negativeSubtotal[seat] += entry.scores[seat];
     }
 
-    rows.push(
-      <View key={`hand-${index}`} style={styles.row}>
+    const rowContent = (
+      <View style={styles.row}>
         <View style={[styles.cell, styles.handCell]}>
           <Text style={styles.handText} numberOfLines={1}>
             {index + 1}. {handName}
+            {entry.valid === false && <Text style={styles.warningMark}> ⚠</Text>}
           </Text>
           <Text style={styles.ruleText} numberOfLines={1}>
             {t(`game:scoreboard.rule.${ruleKey(entry)}`)}
@@ -82,7 +93,17 @@ export function Scoreboard({ handHistory, seatLabels }: ScoreboardProps) {
             {entry.scores[seat]}
           </Text>
         ))}
-      </View>,
+      </View>
+    );
+
+    rows.push(
+      onSelectHand !== undefined ? (
+        <Pressable key={`hand-${index}`} onPress={() => onSelectHand(index)}>
+          {rowContent}
+        </Pressable>
+      ) : (
+        <View key={`hand-${index}`}>{rowContent}</View>
+      ),
     );
 
     if (index === LAST_NEGATIVE_INDEX) {
@@ -130,9 +151,13 @@ function subtotalRow(key: string, label: string, totals: Record<PlayerIndex, num
 }
 
 const styles = StyleSheet.create({
+  // No maxHeight here on purpose: inside a flex-bounded parent (Scorekeeper's always-visible
+  // board area) this ScrollView fills and scrolls within that space automatically; inside a plain
+  // unbounded parent (Solo vs Computer's hand-complete/game-over screens) it just grows to fit all
+  // rows instead of clipping itself behind its own separate scrollbar — the screen around it
+  // scrolls as a whole page if a short viewport ever needs it to.
   container: {
     width: "100%",
-    maxHeight: 360,
     marginVertical: 8,
   },
   content: {
@@ -143,7 +168,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#1c7a53",
+    borderBottomColor: colors.accent,
   },
   handCell: {
     flex: 2.4,
@@ -151,32 +176,38 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   handText: {
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.body,
     fontSize: 13,
     textAlign: "left",
   },
   ruleText: {
-    color: "#8fae9c",
+    color: colors.muted,
+    fontFamily: fonts.body,
     fontSize: 10,
     textAlign: "left",
   },
+  warningMark: {
+    color: colors.validationWarn,
+  },
   cell: {
     flex: 1,
-    color: "#f5e6c8",
+    color: colors.cream,
+    fontFamily: fonts.body,
     fontSize: 13,
     textAlign: "center",
   },
   headerText: {
-    fontWeight: "700",
-    color: "#c9d8cf",
+    fontFamily: fonts.bodyBold,
+    color: colors.secondaryText,
     fontSize: 12,
   },
   subtotalRow: {
-    backgroundColor: "#0f4d38",
+    backgroundColor: colors.surface,
   },
   subtotalText: {
-    fontWeight: "600",
-    color: "#c9d8cf",
+    fontFamily: fonts.bodySemi,
+    color: colors.secondaryText,
     fontSize: 12,
   },
   totalRow: {
@@ -184,10 +215,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     paddingTop: 6,
     borderTopWidth: 2,
-    borderTopColor: "#f2c14e",
+    borderTopColor: colors.gold,
   },
   totalText: {
-    fontWeight: "700",
-    color: "#f2c14e",
+    fontFamily: fonts.bodyBold,
+    color: colors.gold,
   },
 });

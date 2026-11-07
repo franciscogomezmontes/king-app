@@ -27,4 +27,13 @@ config.resolver.unstable_enableSymlinks = true;
 // by default; without this, resolving things like "styleq/transform-localize-style" fails.
 config.resolver.unstable_enablePackageExports = true;
 
+// With package-exports resolution on, colyseus.js's HTTP helper (@colyseus/httpie) resolves to
+// its Node-only build on native platforms — its exports map has no "react-native" condition, and
+// Metro's native condition set (require/import/react-native) picks "import" before "browser",
+// landing on a build that imports Node's http/https/url and 500s. httpie also ships a universal
+// xhr build under its "browser" condition (uses fetch/XMLHttpRequest, both available in React
+// Native) — adding "browser" to the allowed set lets that one win instead, since it comes first
+// in httpie's own exports key order. Confirmed working on web already; this only changes native.
+config.resolver.unstable_conditionNames = ["require", "import", "react-native", "browser"];
+
 module.exports = config;

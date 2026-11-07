@@ -15,24 +15,43 @@ export const SCOREKEEPER_RESOURCES = {
         resume: "Resume Game",
         startNew: "Start New Game",
       },
-      unitLabel: {
-        noTricks: "Tricks captured",
-        noHearts: "Hearts captured",
-        noGentlemen: "Kings & Jacks captured",
-        noLady: "Queens captured",
-        noKingOfHearts: "Captured K♥? (0 or 1)",
-        noLastTwo: "Won of the last 2 tricks (0-2)",
-        positive: "Tricks captured",
+      setup: {
+        title: "New Game",
+        date: "Date",
+        namesHint: "Names are optional — leave blank to keep \"Player N.\"",
+        start: "Start",
+      },
+      // Phrased as an explicit question per hand, not just a bare label — so there's never any
+      // doubt about whether to enter a card count, a trick count, or points (the family's own
+      // concern: "no hay confusión sobre si la persona debe anotar número de corazones o puntaje").
+      question: {
+        noTricks: "How many Tricks did each Player win?",
+        noHearts: "How many Hearts did each Player win?",
+        noGentlemen: "How many Kings & Jacks did each Player win?",
+        noLady: "How many Queens did each Player win?",
+        // Only one King of Hearts exists — asking "how many" per player reads oddly for a
+        // single, all-or-nothing card. Entry is still one field per player (1 for whoever won
+        // it, 0 for the rest), the question just asks it the way a person actually would.
+        noKingOfHearts: "Who captured the King of Hearts?",
+        noLastTwo: "How many of the last 2 tricks did each Player win?",
+        positive: "How many Tricks did each Player win?",
+      },
+      count: {
+        decrease: "Decrease {{name}}'s count",
+        increase: "Increase {{name}}'s count",
       },
       validation: {
         ok: "OK",
-        mismatch: "Revisar, NO suma {{expected}}",
+        mismatch: "Doesn't add up — should total {{expected}}",
       },
       direction: {
         prompt: "Direction",
       },
       confirmHand: "Confirm Hand",
-      nextHand: "Next Hand",
+      edit: {
+        save: "Save Changes",
+        cancel: "Cancel",
+      },
       gameOver: "Game Over",
       newGame: "New Game",
       winner: "{{name}} wins!",
@@ -50,14 +69,24 @@ export const SCOREKEEPER_RESOURCES = {
         resume: "Continuar Partida",
         startNew: "Empezar Nueva Partida",
       },
-      unitLabel: {
-        noTricks: "Bazas capturadas",
-        noHearts: "Corazones capturados",
-        noGentlemen: "Reyes y Jotas capturados",
-        noLady: "Damas capturadas",
-        noKingOfHearts: "¿Capturó el Rey de Corazones? (0 o 1)",
-        noLastTwo: "Bazas ganadas de las últimas 2 (0-2)",
-        positive: "Bazas capturadas",
+      setup: {
+        title: "Nueva Partida",
+        date: "Fecha",
+        namesHint: "Los nombres son opcionales — déjalos en blanco para usar \"Jugador N.\"",
+        start: "Comenzar",
+      },
+      question: {
+        noTricks: "¿Cuántas Bazas ganó cada Jugador?",
+        noHearts: "¿Cuántos Corazones ganó cada Jugador?",
+        noGentlemen: "¿Cuántos Reyes y Jotas ganó cada Jugador?",
+        noLady: "¿Cuántas Damas ganó cada Jugador?",
+        noKingOfHearts: "¿Quién se llevó el Rey de Corazones?",
+        noLastTwo: "¿Cuántas de las últimas 2 bazas ganó cada Jugador?",
+        positive: "¿Cuántas Bazas ganó cada Jugador?",
+      },
+      count: {
+        decrease: "Disminuir cantidad de {{name}}",
+        increase: "Aumentar cantidad de {{name}}",
       },
       validation: {
         ok: "OK",
@@ -67,11 +96,110 @@ export const SCOREKEEPER_RESOURCES = {
         prompt: "Dirección",
       },
       confirmHand: "Confirmar Mano",
-      nextHand: "Siguiente Mano",
+      edit: {
+        save: "Guardar Cambios",
+        cancel: "Cancelar",
+      },
       gameOver: "Fin del Juego",
       newGame: "Nueva Partida",
       winner: "¡{{name}} gana!",
       tie: "Empate: {{names}}",
+    },
+  },
+  fr: {
+    scorekeeper: {
+      player: "Joueur {{number}}",
+      hand: "Main {{number}}/10",
+      backToMenu: "Retour au Menu",
+      resume: {
+        title: "Partie en cours",
+        body: "Tu as déjà une partie de Marqueur en cours. La reprendre, ou en commencer une nouvelle ?",
+        resume: "Reprendre la Partie",
+        startNew: "Commencer une Nouvelle Partie",
+      },
+      setup: {
+        title: "Nouvelle Partie",
+        date: "Date",
+        namesHint: "Les noms sont facultatifs — laisse vide pour garder « Joueur N ».",
+        start: "Commencer",
+      },
+      question: {
+        noTricks: "Combien de Levées chaque Joueur a-t-il remportées ?",
+        noHearts: "Combien de Cœurs chaque Joueur a-t-il remportés ?",
+        noGentlemen: "Combien de Rois et Valets chaque Joueur a-t-il remportés ?",
+        noLady: "Combien de Dames chaque Joueur a-t-il remportées ?",
+        noKingOfHearts: "Qui a remporté le Roi de Cœur ?",
+        noLastTwo: "Combien des 2 dernières levées chaque Joueur a-t-il remportées ?",
+        positive: "Combien de Levées chaque Joueur a-t-il remportées ?",
+      },
+      count: {
+        decrease: "Diminuer le nombre de {{name}}",
+        increase: "Augmenter le nombre de {{name}}",
+      },
+      validation: {
+        ok: "OK",
+        mismatch: "Ça ne tombe pas juste — le total devrait être {{expected}}",
+      },
+      direction: {
+        prompt: "Direction",
+      },
+      confirmHand: "Confirmer la Main",
+      edit: {
+        save: "Enregistrer les Modifications",
+        cancel: "Annuler",
+      },
+      gameOver: "Fin de la Partie",
+      newGame: "Nouvelle Partie",
+      winner: "{{name}} gagne !",
+      tie: "Égalité : {{names}}",
+    },
+  },
+  de: {
+    scorekeeper: {
+      player: "Spieler {{number}}",
+      hand: "Hand {{number}}/10",
+      backToMenu: "Zurück zum Menü",
+      resume: {
+        title: "Spiel in Bearbeitung",
+        body: "Du hast bereits ein laufendes Punktezähler-Spiel. Fortsetzen, oder ein neues starten?",
+        resume: "Spiel Fortsetzen",
+        startNew: "Neues Spiel Starten",
+      },
+      setup: {
+        title: "Neues Spiel",
+        date: "Datum",
+        namesHint: "Namen sind optional — leer lassen, um „Spieler N“ zu verwenden.",
+        start: "Starten",
+      },
+      question: {
+        noTricks: "Wie viele Stiche hat jeder Spieler gewonnen?",
+        noHearts: "Wie viele Herzen hat jeder Spieler gewonnen?",
+        noGentlemen: "Wie viele Könige und Buben hat jeder Spieler gewonnen?",
+        noLady: "Wie viele Damen hat jeder Spieler gewonnen?",
+        noKingOfHearts: "Wer hat den Herzkönig bekommen?",
+        noLastTwo: "Wie viele der letzten 2 Stiche hat jeder Spieler gewonnen?",
+        positive: "Wie viele Stiche hat jeder Spieler gewonnen?",
+      },
+      count: {
+        decrease: "Anzahl von {{name}} verringern",
+        increase: "Anzahl von {{name}} erhöhen",
+      },
+      validation: {
+        ok: "OK",
+        mismatch: "Stimmt nicht — sollte {{expected}} ergeben",
+      },
+      direction: {
+        prompt: "Richtung",
+      },
+      confirmHand: "Hand Bestätigen",
+      edit: {
+        save: "Änderungen Speichern",
+        cancel: "Abbrechen",
+      },
+      gameOver: "Spiel Beendet",
+      newGame: "Neues Spiel",
+      winner: "{{name}} gewinnt!",
+      tie: "Unentschieden: {{names}}",
     },
   },
 };
