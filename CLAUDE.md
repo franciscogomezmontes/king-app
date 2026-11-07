@@ -113,22 +113,36 @@ across all players: exactly −1,300.
 
 **Four positive hands**: dealer names trump, declares no-trump, or auctions the right to the other
 three players. Default scoring: +25/trick captured. Total across all players: exactly +1,300.
+Buying the auction always costs the buyer: the winner pays the dealer the bid in points, not by
+moving tricks between tallies — bid × 25 when the hand is played "up", bid × 75 when "down" (see
+`AUCTION_BID_POINTS_PER_TRICK`/`applyAuctionSettlement` in `scoring.ts`; decision 2026-11-07).
 
-**Alternative rules (toggleable, positive hands only)**:
-- *Mandatory Killing* — must beat the highest card of the led suit if able; else must trump if
-  able; free play only if void in both.
-- *Auction Must Sell* — dealer is forced to accept the winning auction bid.
-- *Playing Up / Playing Down* — a per-game toggle (`GameRules.playingDownEnabled`) gates whether
-  the dealer may ever choose "down" for a hand; when gated on, they choose fresh each positive
-  hand. Up = +25/trick. Down = start at 325, −75/trick captured (can go negative on 5+ tricks).
-- *Backwards* — a per-game toggle (`GameRules.backwardsEnabled`) gates whether whoever names trump
-  may reverse rank (2 high → Ace low) for that hand; when gated on, it's chosen fresh each
-  positive hand, independent of the trump/no-trump choice.
+**Alternative rules (positive hands only unless noted)**:
+- *Mandatory Killing* — **ON by default** (`GameRules.mandatoryKilling`). Must beat the highest
+  card of the led suit if able; else must trump if able; free play only if void in both. Once
+  someone in the trick has already trumped, later players holding the led suit only need to
+  follow it (not beat it), and a void player whose own trumps can't beat the trump already on the
+  table may play anything.
+- *No Face Cards Redeal* (`cambio de juego`) — **ON by default**
+  (`GameRules.noFaceCardsRedealEnabled`). A player dealt a positive hand with no J/Q/K/A (the Ace
+  counts as a face card) may request a full redeal to all four players, any time before they've
+  played their own first card of that hand.
+- *Auction Must Sell* — off by default. Dealer is forced to accept the winning auction bid.
+- *Playing Up / Playing Down* — off by default. A per-game toggle (`GameRules.playingDownEnabled`)
+  gates whether the dealer may ever choose "down" for a hand; when gated on, they choose fresh
+  each positive hand. Up = +25/trick. Down = start at 325, −75/trick captured (can go negative on
+  5+ tricks).
+- *Backwards* — off by default. A per-game toggle (`GameRules.backwardsEnabled`) gates whether
+  whoever names trump may reverse rank (2 high → Ace low) for that hand; when gated on, it's
+  chosen fresh each positive hand, independent of the trump/no-trump choice.
+- Negative hands end early once the outcome is already fully decided — e.g. the instant someone
+  captures K♥ in No King of Hearts, or the 8th king/jack is captured in No Gentlemen — rather than
+  always playing out all 13 tricks (see `isNegativeHandDecided` in `game/actions.ts`).
 
 Candidate additional rules (not yet decided — see Notion "Game Research & Rule Comparisons"
 before implementing any of these): Salade/"Todos" combined negative round, shoot-the-moon-style
-reversal, misdeal/redeal conditions, doubling/redoubling, mandatory minimum bid, kitty-card trump
-hint, target-score match play, short "quick game" mode, partnership scoring overlay.
+reversal, doubling/redoubling, mandatory minimum bid, kitty-card trump hint, target-score match
+play, short "quick game" mode, partnership scoring overlay.
 
 **Not confirmed by the digitized rules doc** (defaulted to the standard convention for this game
 family, kept as swappable call-time parameters in `game/dealer.ts` rather than baked into control

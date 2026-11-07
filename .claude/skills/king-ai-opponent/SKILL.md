@@ -248,14 +248,18 @@ scenario without verifying the search actually agrees at a real budget first —
 file's own regression-test comments for the corrected scenarios (dominant on *both* length and
 quality at once, not pitting the two against each other) this finding forced.
 
-**Deliberately not modeling the auction bid-transfer in the simulation** (`impliedTricks`'s own doc
+**Deliberately not modeling the auction bid payment in the simulation** (`impliedTricks`'s own doc
 comment in `trumpSearch.ts`) — `simulateOnce` always simulates a *direct* declaration, even when
-evaluating a bidder's prospects. Modeling the transfer (a winning bidder's tricks move to the
-dealer's total at scoring time — CLAUDE.md) would be circular for `decideBid` specifically: the
-transfer amount is the bid itself, which is what the simulation's result feeds into computing.
+evaluating a bidder's prospects. Modeling the payment (the winner pays the dealer
+`bid * AUCTION_BID_POINTS_PER_TRICK[direction]` points at scoring time — decision 2026-11-07, see
+CLAUDE.md and `applyAuctionSettlement`) would be circular for `decideBid` specifically: the payment
+amount is a function of the bid itself, which is what the simulation's result feeds into computing.
 Treating "how well would this hand do if I directly named trump with it" as a proxy for "how many
 tricks is this hand worth," then converting to a bid the same way a real player mentally estimates
-their hand, is the same order of simplification `estimateTricks` itself already makes.
+their hand, is the same order of simplification `estimateTricks` itself already makes. `decideBid`/
+`decideSell` reason about the payment directly in points (using whichever direction the relevant
+candidate, `best.direction`, actually represents) rather than routing it through `impliedTricks`'s
+325-baseline trick-count inversion, which answers a different question entirely.
 
 **Four call sites, hard/expert only** — `chooseTrumpDeclarationSearch`, `shouldOpenAuctionSearch`,
 `chooseBidSearch`, `chooseDealerDecisionSearch` (`trumpSearch.ts`), wired in by

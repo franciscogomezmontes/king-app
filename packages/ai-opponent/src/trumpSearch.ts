@@ -1,5 +1,6 @@
 import {
   applyAction,
+  AUCTION_BID_POINTS_PER_TRICK,
   Card,
   createDeck,
   GameRules,
@@ -12,6 +13,7 @@ import {
   TrumpSuit,
 } from "rules-engine";
 import type { Difficulty } from "./chooseCard";
+import { guardedBid, guardedDealerSell } from "./guardrails";
 import { chooseCardHeuristic } from "./heuristic";
 import type { TrumpDeclaration } from "./trump";
 
@@ -193,19 +195,23 @@ export function bestTrumpCandidate(
  * Converts a candidate's simulated average score back into an implied trick count, inverting
  * whichever payout curve `scorePositiveHandFromTricks` used for that candidate's direction ("up":
  * 25/trick; "down": 325 minus 75/trick, so a *higher* score means *fewer* tricks). This is what
- * lets `decideBid`/`decideSell`/`decideOpenAuction` stay in the same trick-count unit
- * `estimateTricks` already uses, so a search-based decision and a formula-based one elsewhere in
- * the same game are comparing like with like.
+ * lets `decideOpenAuction` (and `chooseTrumpDeclarationSearch`'s callers, informally) stay in the
+ * same trick-count unit `estimateTricks` already uses, so a search-based decision and a
+ * formula-based one elsewhere in the same game are comparing like with like. `decideBid`/
+ * `decideSell` deliberately do NOT use this — see their own doc comments — because the auction's
+ * bid payment is settled directly in points (`AUCTION_BID_POINTS_PER_TRICK`), not by routing
+ * through this function's direction-dependent 325-baseline curve.
  *
- * Deliberately does *not* try to model the auction's bid-transfer scoring adjustment (a winning
- * bidder's tricks move from their own total to the dealer's at scoring time — see CLAUDE.md) —
- * `simulateOnce` always simulates a direct declaration. Modeling the transfer here would be
- * circular for `decideBid` specifically: the transfer amount is the bid itself, which is what this
- * function's result feeds into deciding. Treating the direct-declaration average as "how many
- * tricks this hand is worth to whoever names trump with it" and converting that to a bid the same
- * way a real player mentally estimates their hand, rather than re-deriving the bid from a
- * self-referential simulation, is the same kind of simplification `estimateTricks` itself already
- * makes (it doesn't simulate the transfer either).
+ * Deliberately does *not* try to model the auction's bid payment itself (the winner pays the
+ * dealer `bid * AUCTION_BID_POINTS_PER_TRICK[direction]` points at scoring time — see CLAUDE.md
+ * and `applyAuctionSettlement`) — `simulateOnce` always simulates a direct declaration, with no
+ * auction involved. Modeling the payment here would be circular for `decideBid` specifically: the
+ * payment amount is a function of the bid itself, which is what this function's result feeds into
+ * deciding. Treating the direct-declaration average as "how many tricks this hand is worth to
+ * whoever names trump with it" and converting that to a bid the same way a real player mentally
+ * estimates their hand, rather than re-deriving the bid from a self-referential simulation, is the
+ * same kind of simplification `estimateTricks` itself already makes (it doesn't simulate the
+ * payment either).
  */
 export function impliedTricks(candidate: TrumpCandidate, averageScore: number): number {
   return candidate.direction === "up" ? averageScore / 25 : (325 - averageScore) / 75;
@@ -219,9 +225,14 @@ export function impliedTricks(candidate: TrumpCandidate, averageScore: number): 
 const AUCTION_THRESHOLD_TRICKS_NOT_FORCED = 6;
 const AUCTION_THRESHOLD_TRICKS_FORCED_SELL = 3;
 
-/** Bids/asks a real bidder should stay comfortably below their own point-estimate of what they can
- * deliver — see `decideBid`'s own doc comment for the EV reasoning. Tricks, not points. */
-const BID_MARGIN = 2;
+/** Points of headroom a real bidder should keep below their own break-even point-estimate — see
+ * `decideBid`'s own doc comment for the EV reasoning. Expressed in points (not tricks) since a
+ * trick of margin is worth 25 points "up" but 75 "down" (`AUCTION_BID_POINTS_PER_TRICK`) — a flat
+ * trick count would leave three times the real safety buffer "down" as "up" for the same nominal
+ * margin. 50 points matches the old 2-trick-at-25 margin exactly for "up" (no behavior change
+ * there) and scales down to a smaller, direction-appropriate trick margin for "down".
+ */
+const BID_MARGIN_POINTS = 50;
 
 /**
  * The four once-per-hand decisions, as pure functions over an *already-evaluated* candidate (see
@@ -250,22 +261,50 @@ export function decideOpenAuction(best: EvaluatedTrumpCandidate, auctionMustSell
 }
 
 /**
- * Bids a margin below the floored implied-tricks estimate, not the estimate itself. A winning
- * bid nets the bidder `(actual_tricks - bid) * 25` at scoring time (see `applyAuctionTransfer`) —
- * bidding your own true expectation is an ~0-EV move by construction (deliver exactly what you
- * bid and you net nothing, handing the dealer the hand's entire value via the transfer), so a
- * bidder needs to bid meaningfully below their estimate to leave themselves real expected upside.
- * `BID_MARGIN` tricks of headroom, consistent with the real-table underbidding norms
- * `estimateTricks` was itself recalibrated toward (see .claude/skills/king-ai-opponent).
+ * Bids a margin below the bidder's own break-even point, not the break-even point itself. Winning
+ * the auction with bid `B` nets the bidder `best.averageScore - B * AUCTION_BID_POINTS_PER_TRICK
+ * [best.direction]` at scoring time (see `applyAuctionSettlement`) — `best.direction` here is
+ * exactly right, not an approximation, because the bidder is the one who gets to name trump (and
+ * therefore choose direction) if they win, so they know their own post-win settlement rate for
+ * certain. Bidding at the exact break-even point (where that net hits zero) is an ~0-EV move by
+ * construction, so a bidder needs to bid meaningfully below it to leave themselves real expected
+ * upside. `BID_MARGIN_POINTS` of headroom, converted to this candidate's own trick unit via its
+ * direction's rate — see that constant's doc comment for why points, not a flat trick count, is
+ * the right unit to hold constant across directions. Passed through `guardedBid` (guardrails.ts,
+ * "Errores bobos" rows 20/21) as the final, shared floor — by construction this already stays
+ * below `breakEvenTricks`, so in practice `guardedBid` only ever has real work to do capping a
+ * 5+ bid on a hand that isn't genuinely exceptional.
  */
 export function decideBid(best: EvaluatedTrumpCandidate, currentHighBid: number): number | null {
-  const estimate = Math.max(0, Math.floor(impliedTricks(best, best.averageScore)) - BID_MARGIN);
-  return estimate > currentHighBid ? estimate : null;
+  const perTrick = AUCTION_BID_POINTS_PER_TRICK[best.direction];
+  const breakEvenTricks = best.averageScore / perTrick;
+  const marginTricks = BID_MARGIN_POINTS / perTrick;
+  const proposed = Math.max(0, Math.floor(breakEvenTricks - marginTricks));
+  return guardedBid(proposed > currentHighBid ? proposed : null, breakEvenTricks);
 }
 
+/**
+ * Should the dealer accept the auction's top bid? Selling nets the dealer `topBidTricks *
+ * AUCTION_BID_POINTS_PER_TRICK[...]` points in settlement; keeping trump themselves nets
+ * `best.averageScore` (their own best directly-simulated candidate). `AuctionBid` carries no
+ * direction (see rules-engine's `auction.ts`) — nobody has chosen one yet when bids are submitted,
+ * since direction is picked by whoever ends up naming trump, after the auction resolves — so the
+ * dealer can't know the eventual buyer's real settlement rate. This evaluates the sale at the
+ * dealer's *own* best candidate's rate (`best.direction`) as the most defensible single anchor
+ * available without seeing the buyer's hand: it's dimensionally consistent with the "keep" side of
+ * the same comparison, and absent better information there's no reason to assume the buyer would
+ * choose differently, on average, than the dealer themselves would. A sharper estimate (e.g.
+ * weighting by how often "down" actually gets chosen at this table) is exactly the kind of
+ * per-hand sophistication Part 4's heuristic can build on top of this, not a Part 2 concern.
+ * Delegates the actual comparison to `guardedDealerSell` (guardrails.ts, "Errores bobos" row 22)
+ * — converting both sides to the same trick unit (`breakEvenTricks`) rather than comparing in
+ * points directly keeps this one formula the single place that comparison is made, shared with
+ * every other difficulty's own sell decision.
+ */
 export function decideSell(best: EvaluatedTrumpCandidate, topBidTricks: number | null): boolean {
-  if (topBidTricks === null) return false;
-  return topBidTricks > impliedTricks(best, best.averageScore);
+  const perTrick = AUCTION_BID_POINTS_PER_TRICK[best.direction];
+  const breakEvenTricks = best.averageScore / perTrick;
+  return guardedDealerSell(topBidTricks, breakEvenTricks);
 }
 
 /** Difícil's once-per-hand search budget. A modest step up from `HARD_BUDGET_MS` (per-card) — this

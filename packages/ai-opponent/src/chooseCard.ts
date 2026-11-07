@@ -1,4 +1,5 @@
-import { Card, GameState, legalCardsFor, PlayerIndex, RandomSource } from "rules-engine";
+import { Card, currentRuleSet, currentTrumpSuit, GameState, legalCardsFor, PlayerIndex, RandomSource } from "rules-engine";
+import { allowedPlays, GuardrailStats } from "./guardrails";
 import { chooseCardHeuristic } from "./heuristic";
 import { EXPERT_BUDGET_MS, HARD_BUDGET_MS, ismctsChooseCard } from "./ismcts";
 
@@ -30,20 +31,24 @@ export function chooseCard(
   player: PlayerIndex,
   difficulty: Difficulty = "normal",
   random: RandomSource = Math.random,
+  stats?: GuardrailStats,
 ): Card {
   switch (difficulty) {
     case "hard":
-      return ismctsChooseCard(state, player, HARD_BUDGET_MS, random);
+      return ismctsChooseCard(state, player, HARD_BUDGET_MS, random, stats);
     case "expert":
-      return ismctsChooseCard(state, player, EXPERT_BUDGET_MS, random);
+      return ismctsChooseCard(state, player, EXPERT_BUDGET_MS, random, stats);
     case "normal":
-      return chooseCardHeuristic(state, player, true);
+      return chooseCardHeuristic(state, player, true, stats);
     case "easy": {
       const legal = legalCardsFor(state, player);
       if (legal.length > 1 && random() < EASY_RANDOMNESS) {
-        return legal[Math.floor(random() * legal.length)];
+        // Random, but never a silly-mistake violation: the random pick is drawn from the same
+        // guardrail-narrowed set every other difficulty routes through — see guardrails.ts.
+        const allowed = allowedPlays(state, player, legal, currentRuleSet(state), currentTrumpSuit(state), stats);
+        return allowed[Math.floor(random() * allowed.length)];
       }
-      return chooseCardHeuristic(state, player, false);
+      return chooseCardHeuristic(state, player, false, stats);
     }
   }
 }

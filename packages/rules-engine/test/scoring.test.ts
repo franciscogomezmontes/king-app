@@ -109,9 +109,9 @@ describe("scorePositiveHand — zero-sum invariant", () => {
   }
 });
 
-describe("scorePositiveHand — auction transfer zero-sum invariant", () => {
+describe("scorePositiveHand — auction settlement zero-sum invariant", () => {
   for (const direction of ["up", "down"] as const) {
-    it(`direction="${direction}" still totals ${POSITIVE_HAND_TOTAL} when an auction bid transfers tricks`, () => {
+    it(`direction="${direction}" still totals ${POSITIVE_HAND_TOTAL} when an auction bid is settled in points`, () => {
       fc.assert(
         fc.property(
           fc.integer({ min: 0, max: 2 ** 31 - 1 }),
@@ -133,9 +133,42 @@ describe("scorePositiveHand — auction transfer zero-sum invariant", () => {
     });
   }
 
+  it('direction="up": matches the pre-2026-11-07 trick-transfer formula exactly (bid moved tricks before scoring)', () => {
+    // Decision 2026-11-07: settle the bid in points (bid * 25 "up", bid * 75 "down") rather than
+    // moving tricks between tallies before scoring. For "up" the two formulas are mathematically
+    // identical — moving `bid` tricks at 25/trick is the same transfer as paying `bid * 25` points
+    // directly — so this proves the fix is a true no-op for every existing "up" game, while "down"
+    // (the actual bug this fixes — see CLAUDE.md) is intentionally NOT asserted equal here.
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 2 ** 31 - 1 }),
+        fc.integer({ min: 0, max: 3 }),
+        fc.integer({ min: 1, max: 3 }),
+        fc.integer({ min: -5, max: 18 }),
+        (seed, dealer, offset, bid) => {
+          const hand = buildHandResult(seed);
+          const winner = ((dealer + offset) % 4) as PlayerIndex;
+          const auction: AuctionResult = { dealer: dealer as PlayerIndex, winner, bid };
+
+          const oldRawTricks = zeroCounts();
+          for (const trick of hand) oldRawTricks[trick.winner] += 1;
+          const oldTransferredTricks = { ...oldRawTricks };
+          oldTransferredTricks[winner] -= bid;
+          oldTransferredTricks[dealer as PlayerIndex] += bid;
+          const oldScores = scorePositiveHandFromTricks(oldTransferredTricks, "up");
+
+          const newScores = scorePositiveHand(hand, "up", auction);
+          expect(newScores).toEqual(oldScores);
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
   it("an auction winner who wins the most tricks can still score below a non-auction hand's dealer share", () => {
-    // Concrete illustration of the transfer, matching CLAUDE.md: dealer captures 2 tricks but the
-    // auction winner bid (and is credited with transferring) 6, landing on the dealer's tally.
+    // Concrete illustration of the settlement, matching CLAUDE.md: dealer captures 2 tricks (worth
+    // 50) but also receives the auction winner's bid of 6 tricks' worth of points (150), landing
+    // on 200; the winner captured 8 tricks (worth 200) but pays that same 150 away, netting 50.
     const hand: HandResult = [];
     const trickCounts: Record<PlayerIndex, number> = { 0: 2, 1: 8, 2: 2, 3: 1 };
     (Object.keys(trickCounts) as unknown as PlayerIndex[]).forEach((player) => {
@@ -153,9 +186,40 @@ describe("scorePositiveHand — auction transfer zero-sum invariant", () => {
     });
     const auction: AuctionResult = { dealer: 0, winner: 1, bid: 6 };
     const scores = scorePositiveHand(hand, "up", auction);
-    // dealer: 2 + 6 = 8 tricks * 25 = 200; winner: 8 - 6 = 2 tricks * 25 = 50.
+    // dealer: 2 tricks * 25 = 50, + settlement 6*25=150 => 200. winner: 8 tricks * 25 = 200, - 150 => 50.
     expect(scores).toEqual({ 0: 200, 1: 50, 2: 50, 3: 25 });
     expect(sum(scores)).toBe(POSITIVE_HAND_TOTAL);
+  });
+
+  it('direction="down": the buyer always pays, correcting the pre-fix inversion (buying used to gain the buyer points)', () => {
+    // Same trick distribution as the "up" illustration above, scored "down" instead. Under the
+    // OLD trick-transfer bug, moving tricks away from the buyer (winner) *reduced* their 75/trick
+    // penalty, netting them points for buying — backwards from the rule's intent. The new
+    // points-based settlement charges the buyer 75/bid-trick regardless of direction.
+    const hand: HandResult = [];
+    const trickCounts: Record<PlayerIndex, number> = { 0: 2, 1: 8, 2: 2, 3: 1 };
+    (Object.keys(trickCounts) as unknown as PlayerIndex[]).forEach((player) => {
+      for (let i = 0; i < trickCounts[player]; i++) {
+        hand.push({
+          plays: [
+            { player: 0, card: { suit: "C", rank: 2 } },
+            { player: 1, card: { suit: "C", rank: 3 } },
+            { player: 2, card: { suit: "C", rank: 4 } },
+            { player: 3, card: { suit: "C", rank: 5 } },
+          ],
+          winner: player,
+        });
+      }
+    });
+    const auction: AuctionResult = { dealer: 0, winner: 1, bid: 6 };
+    const scores = scorePositiveHand(hand, "down", auction);
+    // Own tricks "down": 0 -> 325-75*2=175; 1 -> 325-75*8=-275; 2 -> 325-75*2=175; 3 -> 325-75*1=250.
+    // Settlement: winner(1) pays dealer(0) 6*75=450. 0: 175+450=625. 1: -275-450=-725.
+    expect(scores).toEqual({ 0: 625, 1: -725, 2: 175, 3: 250 });
+    expect(sum(scores)).toBe(POSITIVE_HAND_TOTAL);
+    // The buyer (winner) must always come out worse than if the settlement were reversed — i.e.
+    // buying costs them, it never pays them, in either direction.
+    expect(scores[1]).toBeLessThan(-275);
   });
 });
 

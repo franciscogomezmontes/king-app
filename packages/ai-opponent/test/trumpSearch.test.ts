@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Card, DEFAULT_GAME_RULES, deal, createDeck, shuffle } from "rules-engine";
-import { bestTrumpCandidate, decideBid, decideOpenAuction, EvaluatedTrumpCandidate } from "../src/trumpSearch";
+import { bestTrumpCandidate, decideBid, decideOpenAuction, decideSell, EvaluatedTrumpCandidate } from "../src/trumpSearch";
 
 function card(suit: Card["suit"], rank: Card["rank"]): Card {
   return { suit, rank };
@@ -204,4 +204,37 @@ describe("decideBid — stays within realistic bounds", () => {
     const average = bids.reduce((sum, b) => sum + b, 0) / bids.length;
     expect(average).toBeLessThan(6);
   }, 30_000);
+});
+
+// Decision 2026-11-07: the auction bid settles in points (bid * AUCTION_BID_POINTS_PER_TRICK),
+// not by moving tricks between tallies. These exercise decideBid/decideSell's math directly
+// against hand-built EvaluatedTrumpCandidate fixtures (bypassing the expensive simulation) since
+// the point is the arithmetic, not the search.
+describe("decideBid / decideSell — points-based settlement", () => {
+  it('decideBid for direction="up" is numerically identical to the pre-fix trick-margin formula (no regression)', () => {
+    const best: EvaluatedTrumpCandidate = { trump: "H", direction: "up", backwards: false, averageScore: 150, simulations: 10 };
+    // breakEven = 150/25 = 6 tricks; margin = 50 points / 25 = 2 tricks -> bids 4.
+    expect(decideBid(best, 0)).toBe(4);
+    expect(decideBid(best, 4)).toBeNull(); // 4 does not strictly exceed the current high of 4
+  });
+
+  it('decideBid for direction="down" uses the direction-correct break-even, not the old 325-baseline inversion', () => {
+    const best: EvaluatedTrumpCandidate = { trump: "H", direction: "down", backwards: false, averageScore: 100, simulations: 10 };
+    // breakEven = 100/75 ≈ 1.33 tricks; margin = 50/75 ≈ 0.67 tricks -> floor(0.67) = 0.
+    expect(decideBid(best, -1)).toBe(0);
+    expect(decideBid(best, 0)).toBeNull();
+  });
+
+  it('decideSell for direction="up" is numerically identical to the pre-fix trick-count comparison (no regression)', () => {
+    const best: EvaluatedTrumpCandidate = { trump: "H", direction: "up", backwards: false, averageScore: 150, simulations: 10 };
+    expect(decideSell(best, 7)).toBe(true); // 7 * 25 = 175 > 150
+    expect(decideSell(best, 6)).toBe(false); // 6 * 25 = 150, not strictly greater
+    expect(decideSell(best, null)).toBe(false);
+  });
+
+  it('decideSell for direction="down" compares the bid\'s settlement value (bid * 75) directly against averageScore', () => {
+    const best: EvaluatedTrumpCandidate = { trump: "H", direction: "down", backwards: false, averageScore: 200, simulations: 10 };
+    expect(decideSell(best, 3)).toBe(true); // 3 * 75 = 225 > 200
+    expect(decideSell(best, 2)).toBe(false); // 2 * 75 = 150, not greater
+  });
 });

@@ -217,3 +217,65 @@ describe("game store — full games via the public API", () => {
     });
   }
 });
+
+describe("game store — bots always take the free no-face-cards redeal (Errores bobos row 23)", () => {
+  it("a bot dealt a positive hand with no face cards gets redealt before it ever plays a card of it", async () => {
+    // Build a self-consistent 52-card deal by hand: seat 1 (the dealer/trumpNamer, a bot) gets 13
+    // of the 36 non-face (rank 2-10) cards — zero J/Q/K/A, exactly the "sin figuras" trigger —
+    // and the other 39 cards (the remaining 23 non-face cards plus all 16 face cards) split
+    // evenly across the other three seats.
+    const deck = createDeck();
+    const nonFace = deck.filter((c) => c.rank < 11);
+    const noFaceHand = nonFace.slice(0, 13);
+    const remaining = deck.filter((c) => !noFaceHand.some((n) => n.suit === c.suit && n.rank === c.rank));
+    expect(noFaceHand).toHaveLength(13);
+    expect(remaining).toHaveLength(39);
+
+    const game: GameState = {
+      ruleSet: { ...DEFAULT_GAME_RULES, noFaceCardsRedealEnabled: true },
+      firstDealer: 1,
+      handIndex: 6, // any "positive" index
+      handType: "positive",
+      dealer: 1,
+      phase: "trump-selection",
+      hands: { 0: remaining.slice(0, 13), 1: noFaceHand, 2: remaining.slice(13, 26), 3: remaining.slice(26, 39) },
+      completedTricks: [],
+      currentTrick: [],
+      currentTurn: 1,
+      positiveSetup: {
+        trumpNamer: 1,
+        trump: null,
+        direction: "up",
+        backwards: false,
+        auctionOpened: false,
+        bids: [],
+        auction: null,
+      },
+      cumulativeScores: { 0: 0, 1: 0, 2: 0, 3: 0 },
+      handHistory: [],
+    };
+
+    const random = mulberry32(99);
+    const store = resumeGameStore(
+      { game, humanSeat: HUMAN_SEAT, difficulty: "normal", botRosterIndices: [0, 1, 2], auctionTurn: INITIAL_AUCTION_TURN, auctionLog: [] },
+      { random, botDelayMs: 0 },
+    );
+
+    const snapshots: GameState[] = [];
+    const unsubscribe = store.subscribe((s) => snapshots.push(s.game));
+    await store.getState().waitForIdle();
+    unsubscribe();
+
+    function sameHand(a: typeof noFaceHand, b: typeof noFaceHand): boolean {
+      return a.length === b.length && a.every((c, i) => c.suit === b[i].suit && c.rank === b[i].rank);
+    }
+
+    // The only thing that can change seat 1's hand before they've played any card of this hand is
+    // a REQUEST_REDEAL (a fresh DEAL_HAND only happens between hands) — so finding a snapshot
+    // where it differs from the original face-less hand proves the redeal fired, not chance.
+    const redealt = snapshots.find((s) => !sameHand(s.hands[1], noFaceHand));
+    expect(redealt).toBeDefined();
+    expect(redealt!.completedTricks.some((t) => t.plays.some((p) => p.player === 1))).toBe(false);
+    expect(redealt!.currentTrick.some((p) => p.player === 1)).toBe(false);
+  });
+});

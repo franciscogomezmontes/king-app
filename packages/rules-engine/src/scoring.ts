@@ -41,6 +41,19 @@ export const POSITIVE_HAND_TOTAL = 325;
 export const POSITIVE_GAME_TOTAL = POSITIVE_HAND_TOTAL * 4; // +1300
 
 /**
+ * Points the auction winner pays the dealer per bid trick, settled directly in points rather than
+ * by moving tricks between tallies (see `applyAuctionSettlement`) — decision 2026-11-07: buying
+ * always costs the buyer, in both directions. "Up" charges the same 25/trick the hand itself pays
+ * out; "down" charges 75/trick — the same rate a captured trick *costs* in that direction — so
+ * that naming trump only pays off for the buyer when it saves them more than 75 points per bid
+ * trick, matching "down"'s own avoid-tricks logic instead of inverting it.
+ */
+export const AUCTION_BID_POINTS_PER_TRICK: Record<"up" | "down", number> = {
+  up: 25,
+  down: 75,
+};
+
+/**
  * Points lost per unit captured, for each negative hand — tricks/hearts/(kings+jacks)/queens/
  * capturing K♥/winning one of the last two tricks. This is the single home for these literals;
  * `scoreNegativeHand` below derives a per-player count from the actual play-by-play `HandResult`
@@ -141,24 +154,29 @@ export function scoreNegativeHand(
 }
 
 /**
- * Applies an auction's trick transfer: `auction.bid` tricks move from `auction.winner`'s tally
- * to `auction.dealer`'s, before scoring. This is a pure redistribution between two players — the
- * total across all 4 players is unchanged — so it can never break the positive-hand zero-sum
- * invariant, no matter the bid size (including a bid that exceeds what `winner` actually
- * captured, which is a legal, if unlucky, outcome and simply yields a negative trick count for
- * scoring purposes). Returns `tricksWon` unchanged if there was no auction.
+ * Settles an auction's bid in points: `auction.winner` pays `auction.dealer` `auction.bid *
+ * AUCTION_BID_POINTS_PER_TRICK[direction]` points, applied to each player's already-computed
+ * per-trick score (not to trick counts — the buyer's own captured tricks still score as their
+ * own, at whatever direction's rate; the bid is a separate point payment on top). This is a pure
+ * transfer between two players — the total across all 4 players is unchanged — so it can never
+ * break the positive-hand zero-sum invariant, no matter the bid size (including a bid that
+ * exceeds what `winner` actually captured, which is a legal, if unlucky, outcome and simply costs
+ * `winner` more points than their own tricks earned). Returns `scores` unchanged if there was no
+ * auction.
  */
-export function applyAuctionTransfer(
-  tricksWon: Record<PlayerIndex, number>,
+export function applyAuctionSettlement(
+  scores: Record<PlayerIndex, number>,
   auction: AuctionResult | null,
+  direction: "up" | "down" = "up",
 ): Record<PlayerIndex, number> {
-  if (auction === null) return tricksWon;
+  if (auction === null) return scores;
+  const payment = auction.bid * AUCTION_BID_POINTS_PER_TRICK[direction];
   // Sequential mutation on a clone (rather than a single object literal with two computed keys)
   // so this stays correct even if winner and dealer were ever the same seat — the two updates
   // would otherwise collide and only the second key's write would stick.
-  const result = { ...tricksWon };
-  result[auction.winner] -= auction.bid;
-  result[auction.dealer] += auction.bid;
+  const result = { ...scores };
+  result[auction.winner] -= payment;
+  result[auction.dealer] += payment;
   return result;
 }
 
@@ -166,7 +184,7 @@ export function applyAuctionTransfer(
  * Scores a positive hand directly from each player's final trick count — the shape Scorekeeper
  * mode enters (mirroring `King Scorekeeper.xlsx`'s "Cantidad" column for hands I-IV), where the
  * family records the already-settled trick tally per player directly, with no auction bid
- * transfer to model (that's settled physically at the table before anyone writes numbers down).
+ * payment to model (that's settled physically at the table before anyone writes numbers down).
  * Default direction "up" pays +25/trick captured. "down" (the "Playing Down" alternative rule)
  * starts every player at 325 and deducts 75/trick captured. Both directions always sum to exactly
  * POSITIVE_HAND_TOTAL (325) across the 4 players, regardless of how the 13 tricks were
@@ -186,19 +204,20 @@ export function scorePositiveHandFromTricks(
 }
 
 /**
- * Scores one positive hand from its play-by-play `HandResult`. `auction`, if given, is applied
- * via `applyAuctionTransfer` before the per-trick payout is computed — see CLAUDE.md's auction
- * bid transfer note.
+ * Scores one positive hand from its play-by-play `HandResult`. Each player's tricks score at
+ * their own rate first; `auction`, if given, then settles the bid in points via
+ * `applyAuctionSettlement` — see CLAUDE.md's auction bid payment note and the decision above
+ * `AUCTION_BID_POINTS_PER_TRICK`.
  */
 export function scorePositiveHand(
   hand: HandResult,
   direction: "up" | "down" = "up",
   auction: AuctionResult | null = null,
 ): Record<PlayerIndex, number> {
-  const rawTricksWon = zeroScores();
-  for (const trick of hand) rawTricksWon[trick.winner] += 1;
-  const tricksWon = applyAuctionTransfer(rawTricksWon, auction);
-  return scorePositiveHandFromTricks(tricksWon, direction);
+  const tricksWon = zeroScores();
+  for (const trick of hand) tricksWon[trick.winner] += 1;
+  const scores = scorePositiveHandFromTricks(tricksWon, direction);
+  return applyAuctionSettlement(scores, auction, direction);
 }
 
 /**

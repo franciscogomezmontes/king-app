@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { AuctionBid, AuctionResult, highestBid, resolveAuction } from "../src/auction";
-import { applyAuctionTransfer } from "../src/scoring";
+import { applyAuctionSettlement, AUCTION_BID_POINTS_PER_TRICK } from "../src/scoring";
 import { DEFAULT_RULE_SET, PlayerIndex, RuleSet } from "../src/types";
 
 function sum(record: Record<PlayerIndex, number>): number {
@@ -80,46 +80,55 @@ describe("resolveAuction", () => {
   });
 });
 
-describe("applyAuctionTransfer", () => {
-  it("returns tricksWon unchanged when there's no auction", () => {
-    const tricksWon: Record<PlayerIndex, number> = { 0: 3, 1: 4, 2: 3, 3: 3 };
-    expect(applyAuctionTransfer(tricksWon, null)).toEqual(tricksWon);
+describe("applyAuctionSettlement", () => {
+  it("returns scores unchanged when there's no auction", () => {
+    const scores: Record<PlayerIndex, number> = { 0: 75, 1: 100, 2: 75, 3: 75 };
+    expect(applyAuctionSettlement(scores, null)).toEqual(scores);
   });
 
-  it("moves the bid amount — not the winner's actual captured tricks — from winner to dealer", () => {
-    // Winner captured 9 tricks but only bid 4: dealer gets the bid (4), winner keeps the surplus (5).
-    const tricksWon: Record<PlayerIndex, number> = { 0: 2, 1: 9, 2: 1, 3: 1 };
+  it('direction="up": winner pays dealer bid * 25 points, independent of tricks actually captured', () => {
+    const scores: Record<PlayerIndex, number> = { 0: 50, 1: 225, 2: 25, 3: 25 };
     const auction: AuctionResult = { dealer: 0, winner: 1, bid: 4 };
-    expect(applyAuctionTransfer(tricksWon, auction)).toEqual({ 0: 6, 1: 5, 2: 1, 3: 1 });
+    expect(applyAuctionSettlement(scores, auction, "up")).toEqual({ 0: 150, 1: 125, 2: 25, 3: 25 });
   });
 
-  it("still moves the full bid even if the winner fails to capture that many tricks", () => {
-    // Winner bid 8 but only captured 3: dealer still receives the full bid of 8, winner goes negative.
-    const tricksWon: Record<PlayerIndex, number> = { 0: 5, 1: 3, 2: 3, 3: 2 };
+  it('direction="down": winner pays dealer bid * 75 points — more expensive than "up" for the same bid', () => {
+    const scores: Record<PlayerIndex, number> = { 0: 100, 1: 25, 2: 75, 3: 125 };
+    const auction: AuctionResult = { dealer: 0, winner: 1, bid: 4 };
+    expect(applyAuctionSettlement(scores, auction, "down")).toEqual({ 0: 400, 1: -275, 2: 75, 3: 125 });
+  });
+
+  it("still charges the full bid even if the winner's own tricks score poorly (bid can exceed what they captured)", () => {
+    const scores: Record<PlayerIndex, number> = { 0: 125, 1: 75, 2: 75, 3: 50 };
     const auction: AuctionResult = { dealer: 0, winner: 1, bid: 8 };
-    expect(applyAuctionTransfer(tricksWon, auction)).toEqual({ 0: 13, 1: -5, 2: 3, 3: 2 });
+    expect(applyAuctionSettlement(scores, auction, "up")).toEqual({ 0: 325, 1: -125, 2: 75, 3: 50 });
   });
 
-  it("never changes the total trick count across all 4 players, for any dealer/winner/bid combination", () => {
+  it("never changes the total points across all 4 players, for any dealer/winner/bid/direction combination", () => {
     fc.assert(
       fc.property(
-        fc.integer({ min: 0, max: 13 }),
-        fc.integer({ min: 0, max: 13 }),
-        fc.integer({ min: 0, max: 13 }),
-        fc.integer({ min: 0, max: 13 }),
+        fc.integer({ min: -500, max: 500 }),
+        fc.integer({ min: -500, max: 500 }),
+        fc.integer({ min: -500, max: 500 }),
+        fc.integer({ min: -500, max: 500 }),
         fc.integer({ min: 0, max: 3 }),
         fc.integer({ min: 1, max: 3 }),
         fc.integer({ min: -20, max: 20 }),
-        (t0, t1, t2, t3, dealer, offset, bid) => {
-          const tricksWon: Record<PlayerIndex, number> = { 0: t0, 1: t1, 2: t2, 3: t3 };
-          const total = sum(tricksWon);
+        fc.constantFrom("up", "down"),
+        (s0, s1, s2, s3, dealer, offset, bid, direction) => {
+          const scores: Record<PlayerIndex, number> = { 0: s0, 1: s1, 2: s2, 3: s3 };
+          const total = sum(scores);
           const winner = ((dealer + offset) % 4) as PlayerIndex;
           const auction: AuctionResult = { dealer: dealer as PlayerIndex, winner, bid };
-          const after = applyAuctionTransfer(tricksWon, auction);
+          const after = applyAuctionSettlement(scores, auction, direction as "up" | "down");
           expect(sum(after)).toBe(total);
         },
       ),
       { numRuns: 200 },
     );
+  });
+
+  it("AUCTION_BID_POINTS_PER_TRICK: down charges 3x up, per the 2026-11-07 decision", () => {
+    expect(AUCTION_BID_POINTS_PER_TRICK.down).toBe(AUCTION_BID_POINTS_PER_TRICK.up * 3);
   });
 });

@@ -20,8 +20,10 @@ Tricks −90 each of the last two tricks. Sum across all 4 players across all 6 
 is the only suit left in their hand.
 
 Positive hands: dealer names trump / no-trump, or auctions the choice (bid = number of tricks;
-winner names trump, their bid is transferred from their trick count to the dealer's at scoring
-time). Default scoring +25/trick. Sum across all 4 players across all 4 hands: **exactly +1,300**.
+winner names trump, then pays the dealer the bid in points — bid × 25 "up", bid × 75 "down",
+decision 2026-11-07 — rather than moving tricks between tallies; see `AUCTION_BID_POINTS_PER_TRICK`/
+`applyAuctionSettlement` in scoring.ts). Default scoring +25/trick. Sum across all 4 players
+across all 4 hands: **exactly +1,300**.
 
 Whole game sums to **exactly 0**. This is the single invariant every change must preserve.
 
@@ -62,11 +64,16 @@ reversed penalty is redistributed to still net to the hand's fixed total).
 
 - Confusing "No Gentlemen" (kings AND jacks, 8 cards, −30 each) with a kings-only or jacks-only
   rule — it's both ranks together.
-- Forgetting the auction bid transfer: if the dealer auctions off trump-naming rights, the winning
-  bid's trick count moves from the bidder's total to the dealer's before scoring, it does not just
-  determine who names trump.
+- Forgetting the auction bid payment: if the dealer auctions off trump-naming rights, the winning
+  bidder pays the dealer `bid * AUCTION_BID_POINTS_PER_TRICK[direction]` points at scoring time
+  (25/trick "up", 75/trick "down" — decision 2026-11-07), settled directly on each player's already-
+  computed score. It does not just determine who names trump, and it is **not** modeled by moving
+  tricks between tallies before scoring — that was the pre-2026-11-07 approach and it silently
+  inverted the payment direction for "down" (buying used to *gain* the buyer points instead of
+  costing them). See `applyAuctionSettlement` in scoring.ts.
 - Applying "Playing Down"'s −75/trick against the *wrong* starting baseline — each player starts
-  that hand at 325, not the table starts at 325 total.
+  that hand at 325, not the table starts at 325 total. The auction bid's 75/trick payment is a
+  separate, flat point charge on top of that per-trick curve, not a further transformation of it.
 - Treating "Backwards" as a trump/no-trump choice — it's an independent toggle on top of whatever
   trump decision was already made.
 - Mandatory Killing's "beat"/"trump if able" must be judged against the trick's actual current

@@ -6,14 +6,14 @@ import {
   currentTrumpSuit,
   GameState,
   legalCardsFor,
-  NegativeHandType,
   PlayerIndex,
   RandomSource,
   shuffle,
   Suit,
 } from "rules-engine";
 import { CardTracker, trackCards } from "./cardTracker";
-import { chooseCardHeuristic, safeNegativeDiscard, safeNegativeLeads, safePositiveLeads } from "./heuristic";
+import { allowedPlays, GuardrailStats } from "./guardrails";
+import { chooseCardHeuristic } from "./heuristic";
 
 const ALL_SEATS: PlayerIndex[] = [0, 1, 2, 3];
 
@@ -145,20 +145,19 @@ interface RewardRange {
 /** One full ISMCTS iteration: a fresh determinization, then select/expand down the shared tree,
  * roll out the rest of the hand with Tier 1, and back-propagate the real score.
  *
- * `rootCandidates`, when non-null, restricts which actions are ever considered at the tree's
- * root node specifically (`node === root`, i.e. depth 0 of this iteration — the real decision
- * being searched, before any determinization-specific divergence) — see `ismctsChooseCard`'s own
- * doc comment for the full breakdown of which decisions get pre-filtered by which known domain
- * fact, and why, before the search spends any of its modest budget on them. Every deeper node (any
- * other decision point reached later in a rollout/traversal, including this same player leading or
- * discarding again in a later trick) is unaffected — full `legalCardsFor` as always. */
+ * `rootCandidates` restricts which actions are ever considered at the tree's root node
+ * specifically (`node === root`, i.e. depth 0 of this iteration — the real decision being
+ * searched, before any determinization-specific divergence) — see `ismctsChooseCard`'s own doc
+ * comment for what pre-filters it. Every deeper node (any other decision point reached later in a
+ * rollout/traversal, including this same player leading or discarding again in a later trick) is
+ * unaffected — full `legalCardsFor` as always. */
 function runIteration(
   root: TreeNode,
   state: GameState,
   player: PlayerIndex,
   random: RandomSource,
   rewardRange: RewardRange,
-  rootCandidates: Card[] | null,
+  rootCandidates: Card[],
 ): void {
   const deal = determinizeHands(state, player, random);
   let current: GameState = { ...state, hands: deal };
@@ -168,7 +167,7 @@ function runIteration(
   // Select + expand.
   while (current.phase === "playing") {
     const mover = current.currentTurn;
-    const legal = node === root && rootCandidates !== null ? rootCandidates : legalCardsFor(current, mover);
+    const legal = node === root ? rootCandidates : legalCardsFor(current, mover);
 
     for (const card of legal) {
       const child = node.children.get(cardKey(card));
@@ -230,40 +229,26 @@ export const EXPERT_BUDGET_MS = 900;
  * `budgetMs` is a parameter (not hardcoded to `HARD_BUDGET_MS`/`EXPERT_BUDGET_MS`) specifically so
  * tests can drive this with tiny/zero budgets without waiting on production-length searches.
  *
- * The root's candidate set is pre-filtered by the same domain facts Tier 1 already applies
- * deterministically, rather than relying on a modest time budget spread across a wide branching
- * factor to statistically rediscover them — see .claude/skills/king-ai-opponent and `runIteration`'s
- * own doc comment for exactly where this applies (root only, not every node in the tree):
- * - Negative-hand lead: excludes self-evidently dominated moves (`safeNegativeLeads` — a proven
- *   master, or a card in this hand type's own danger category, e.g. a Jack or King in noGentlemen).
- * - Negative-hand mid-trick (following/discarding): when a safe, non-winning play exists, narrows
- *   straight to the single most dangerous one (`safeNegativeDiscard`) — a permanently safe, zero-
- *   cost moment to shed a danger card is not a close call worth spending search budget on.
- * - Positive-hand lead: excludes an unjustified trump lead (`safePositiveLeads` — no master, and
- *   not genuine control length) so the search can't "discover" that leading a bare trump just to
- *   lead it occasionally looks fine in a handful of noisy rollouts.
- * - Positive-hand mid-trick: unrestricted — Tier 1's own "win cheaply, else duck cheaply" logic
- *   here has no equivalent structural gap to close (see the heuristic's own mid-trick branch).
+ * The root's candidate set is pre-filtered by `allowedPlays` (guardrails.ts) — the same
+ * "Errores bobos" floor every difficulty routes through — rather than relying on a modest time
+ * budget spread across a wide branching factor to statistically rediscover a known domain fact
+ * (a proven-master lead, an unjustified trump lead, a mid-trick duck that's already decided, a
+ * cheapest-winner cut, ...). See guardrails.ts's own doc comments for exactly what it excludes;
+ * `runIteration`'s own doc comment for exactly where this applies (root only, not every node in
+ * the tree).
  */
 export function ismctsChooseCard(
   state: GameState,
   player: PlayerIndex,
   budgetMs: number,
   random: RandomSource = Math.random,
+  stats?: GuardrailStats,
 ): Card {
   const rootLegal = legalCardsFor(state, player);
   if (rootLegal.length <= 1) return rootLegal[0];
 
-  const isPositive = state.handType === "positive";
-  const leading = state.currentTrick.length === 0;
-  const rootCandidates: Card[] | null = leading
-    ? isPositive
-      ? safePositiveLeads(rootLegal, state.hands[player], trackCards(state), currentRuleSet(state), currentTrumpSuit(state))
-      : safeNegativeLeads(rootLegal, state.hands[player], trackCards(state), state.handType as NegativeHandType)
-    : isPositive
-      ? null
-      : safeNegativeDiscard(state, player, rootLegal, currentRuleSet(state));
-  if (rootCandidates !== null && rootCandidates.length === 1) return rootCandidates[0];
+  const rootCandidates = allowedPlays(state, player, rootLegal, currentRuleSet(state), currentTrumpSuit(state), stats);
+  if (rootCandidates.length === 1) return rootCandidates[0];
 
   const root = newNode();
   const rewardRange: RewardRange = { min: Infinity, max: -Infinity };
@@ -273,7 +258,7 @@ export function ismctsChooseCard(
     runIteration(root, state, player, random, rewardRange, rootCandidates);
   }
 
-  const searchSpace = rootCandidates ?? rootLegal;
+  const searchSpace = rootCandidates;
   let bestCard: Card | null = null;
   let bestAverage = -Infinity;
   for (const card of searchSpace) {

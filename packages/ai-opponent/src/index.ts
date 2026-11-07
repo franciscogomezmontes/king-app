@@ -1,5 +1,6 @@
 export * from "./handStrength";
 export * from "./cardTracker";
+export * from "./guardrails";
 export * from "./heuristic";
 export * from "./ismcts";
 export * from "./chooseCard";
